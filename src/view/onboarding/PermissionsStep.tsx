@@ -384,7 +384,8 @@ export function PermissionsStep() {
                 Accessibility
               </div>
               <div style={{ fontSize: 12, color: '#6b6660', lineHeight: 1.5 }}>
-                Lets Thuki respond to activator key (<KeyChip label={isWindows ? 'Ctrl' : '⌃'} />
+                Lets Thuki respond to activator key (
+                <KeyChip label={isWindows ? 'Ctrl' : '⌃'} />
                 <KeyChip label={isWindows ? 'Ctrl' : '⌃'} />)
               </div>
             </div>

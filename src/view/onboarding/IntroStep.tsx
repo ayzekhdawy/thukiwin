@@ -87,17 +87,23 @@ export function IntroStep({ onComplete }: Props) {
             icon={<KeyboardIcon />}
             title={
               <>
-                <span>Double-tap</span> <KeyChip>{isWindows ? 'Ctrl' : '⌃'}</KeyChip>{' '}
+                <span>Double-tap</span>{' '}
+                <KeyChip>{isWindows ? 'Ctrl' : '⌃'}</KeyChip>{' '}
                 <span>to summon</span>
               </>
             }
-            desc={isWindows ? 'Press Ctrl twice from any app, any time' : 'Press Control twice from any app, any time'}
+            desc={
+              isWindows
+                ? 'Press Ctrl twice from any app, any time'
+                : 'Press Control twice from any app, any time'
+            }
           />
           <Fact
             icon={<SelectionIcon />}
             title={
               <>
-                <span>Select text, then double-tap</span> <KeyChip>{isWindows ? 'Ctrl' : '⌃'}</KeyChip>
+                <span>Select text, then double-tap</span>{' '}
+                <KeyChip>{isWindows ? 'Ctrl' : '⌃'}</KeyChip>
               </>
             }
             desc="It opens with your selection already quoted as context"

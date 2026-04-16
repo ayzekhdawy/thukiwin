@@ -634,6 +634,7 @@ describe('App', () => {
     });
 
     it('closes history panel when a conversation is loaded', async () => {
+      invoke.mockResolvedValueOnce([]); // tts_list_voices (fetched on mount by useTts)
       invoke.mockResolvedValueOnce({
         active: 'gemini-3-flash-preview',
         all: ['gemini-3-flash-preview'],

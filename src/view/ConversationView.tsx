@@ -2,8 +2,10 @@ import { motion } from 'framer-motion';
 import { useRef, useEffect } from 'react';
 import { ChatBubble } from '../components/ChatBubble';
 import { TypingIndicator } from '../components/TypingIndicator';
+import { VoiceSelector } from '../components/VoiceSelector';
 import { WindowControls } from '../components/WindowControls';
 import type { Message } from '../hooks/useOllama';
+import type { TtsVoice } from '../hooks/useTts';
 
 /**
  * Props for the ConversationView component.
@@ -43,6 +45,22 @@ interface ConversationViewProps {
   onNewConversation?: () => void;
   /** Called when the user clicks a thumbnail to preview it. */
   onImagePreview?: (path: string) => void;
+  /** The message ID currently being spoken by TTS, if any. */
+  speakingMessageId: string | null;
+  /** Called when the user clicks the speak button on a message. */
+  onSpeak: (messageId: string, content: string) => void;
+  /** Called when the user clicks stop on a playing TTS message. */
+  onStopSpeaking: () => void;
+  /** Whether the TTS privacy disclosure has been acknowledged. */
+  privacyAcknowledged: boolean;
+  /** Called when the user acknowledges the TTS privacy disclosure. */
+  onAcknowledgePrivacy: () => void;
+  /** Available TTS voices for voice selector. */
+  ttsVoices: TtsVoice[];
+  /** Currently selected TTS voice short name. */
+  selectedVoice: string;
+  /** Called when the user selects a different TTS voice. */
+  onVoiceChange: (voice: string) => void;
 }
 
 /**
@@ -65,6 +83,14 @@ export function ConversationView({
   onHistoryOpen,
   onNewConversation,
   onImagePreview,
+  speakingMessageId,
+  onSpeak,
+  onStopSpeaking,
+  privacyAcknowledged,
+  onAcknowledgePrivacy,
+  ttsVoices,
+  selectedVoice,
+  onVoiceChange,
 }: ConversationViewProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -167,6 +193,15 @@ export function ConversationView({
         onHistoryOpen={onHistoryOpen}
       />
 
+      {/* Voice selector — compact dropdown for TTS voice selection */}
+      <div className="px-4 pt-1 pb-0 flex items-center">
+        <VoiceSelector
+          voices={ttsVoices}
+          selectedVoice={selectedVoice}
+          onVoiceChange={onVoiceChange}
+        />
+      </div>
+
       <div
         ref={scrollContainerRef}
         className="chat-messages-scroll px-5 py-4 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto"
@@ -188,6 +223,7 @@ export function ConversationView({
               key={msg.id}
               role={msg.role}
               content={msg.content}
+              messageId={msg.id}
               quotedText={msg.quotedText}
               index={i}
               isStreaming={isLastAssistant}
@@ -198,6 +234,11 @@ export function ConversationView({
               isThinking={
                 isLastAssistant && !msg.content && !!msg.thinkingContent
               }
+              isSpeaking={msg.id === speakingMessageId}
+              onSpeak={onSpeak}
+              onStopSpeaking={onStopSpeaking}
+              privacyAcknowledged={privacyAcknowledged}
+              onAcknowledgePrivacy={onAcknowledgePrivacy}
             />
           );
         })}

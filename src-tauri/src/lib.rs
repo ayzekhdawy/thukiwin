@@ -21,6 +21,7 @@ pub mod history;
 pub mod images;
 pub mod onboarding;
 pub mod screenshot;
+pub mod tts;
 
 #[cfg(target_os = "macos")]
 mod activator;
@@ -933,6 +934,9 @@ pub fn run() {
             app.manage(commands::SystemPrompt(commands::load_system_prompt()));
             app.manage(commands::load_model_config());
 
+            // ── TTS state ────────────────────────────────────────────────
+            app.manage(tts::TtsState::new());
+
             // ── SQLite database for conversation history ──────────
             let app_data_dir = app
                 .path()
@@ -1013,6 +1017,13 @@ pub fn run() {
             windows_permissions::check_screen_recording_tcc_granted,
             #[cfg(all(target_os = "windows", not(coverage)))]
             windows_permissions::quit_and_relaunch,
+            // TTS commands
+            #[cfg(not(coverage))]
+            tts::tts_speak,
+            #[cfg(not(coverage))]
+            tts::tts_stop,
+            #[cfg(not(coverage))]
+            tts::tts_list_voices,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

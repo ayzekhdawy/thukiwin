@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ErrorCard } from './ErrorCard';
 import { CopyButton } from './CopyButton';
+import { SpeakButton } from './SpeakButton';
 import { ImageThumbnails } from './ImageThumbnails';
 import { ThinkingBlock } from './ThinkingBlock';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -70,6 +71,8 @@ interface ChatBubbleProps {
   content: string;
   /** Stagger index for orchestrated entrance choreography. */
   index: number;
+  /** Unique identifier of the message, used for TTS tracking. */
+  messageId: string;
   /** Selected text from the host app that was quoted alongside this message, if any. */
   quotedText?: string;
   /** Whether this bubble is actively streaming content from the LLM. */
@@ -84,6 +87,16 @@ interface ChatBubbleProps {
   imagePaths?: string[];
   /** Called when the user clicks a thumbnail to preview it. */
   onImagePreview?: (path: string) => void;
+  /** Whether this message is currently being spoken by TTS. */
+  isSpeaking?: boolean;
+  /** Called when the user clicks the speak button to start speaking. */
+  onSpeak?: (messageId: string, content: string) => void;
+  /** Called when the user clicks stop on a playing message. */
+  onStopSpeaking?: () => void;
+  /** Whether the TTS privacy disclosure has been acknowledged. */
+  privacyAcknowledged?: boolean;
+  /** Called when the user acknowledges the TTS privacy disclosure. */
+  onAcknowledgePrivacy?: () => void;
 }
 
 /**
@@ -120,6 +133,7 @@ export function ChatBubble({
   role,
   content,
   index,
+  messageId,
   quotedText,
   isStreaming = false,
   imagePaths,
@@ -127,6 +141,11 @@ export function ChatBubble({
   errorKind,
   thinkingContent,
   isThinking,
+  isSpeaking = false,
+  onSpeak,
+  onStopSpeaking,
+  privacyAcknowledged = false,
+  onAcknowledgePrivacy,
 }: ChatBubbleProps) {
   const isUser = role === 'user';
 
@@ -179,6 +198,18 @@ export function ChatBubble({
           {content && (
             <div className="h-6 flex items-center px-1">
               <CopyButton content={content} align="right" />
+              {onSpeak && onStopSpeaking && onAcknowledgePrivacy && (
+                <SpeakButton
+                  content={content}
+                  messageId={messageId}
+                  align="right"
+                  isSpeaking={isSpeaking}
+                  onSpeak={onSpeak}
+                  onStop={onStopSpeaking}
+                  privacyAcknowledged={privacyAcknowledged}
+                  onAcknowledgePrivacy={onAcknowledgePrivacy}
+                />
+              )}
             </div>
           )}
         </div>
@@ -201,6 +232,18 @@ export function ChatBubble({
           {!errorKind && !isStreaming && (
             <div className="h-6 flex items-center">
               <CopyButton content={content} align="left" />
+              {onSpeak && onStopSpeaking && onAcknowledgePrivacy && (
+                <SpeakButton
+                  content={content}
+                  messageId={messageId}
+                  align="left"
+                  isSpeaking={isSpeaking}
+                  onSpeak={onSpeak}
+                  onStop={onStopSpeaking}
+                  privacyAcknowledged={privacyAcknowledged}
+                  onAcknowledgePrivacy={onAcknowledgePrivacy}
+                />
+              )}
             </div>
           )}
         </div>

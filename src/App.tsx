@@ -13,6 +13,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalSize } from '@tauri-apps/api/dpi';
 import { useOllama } from './hooks/useOllama';
 import type { Message } from './hooks/useOllama';
+import { useTts } from './hooks/useTts';
 import { useConversationHistory } from './hooks/useConversationHistory';
 import { ConversationView } from './view/ConversationView';
 import { AskBarView, MAX_IMAGES } from './view/AskBarView';
@@ -154,6 +155,18 @@ function App() {
 
   const { messages, ask, cancel, isGenerating, reset, loadMessages } =
     useOllama(handleTurnComplete);
+
+  const {
+    speakingMessageId,
+    speak: ttsSpeak,
+    stop: ttsStop,
+    fetchVoices,
+    voices: ttsVoices,
+    selectedVoice,
+    setSelectedVoice,
+    privacyAcknowledged,
+    acknowledgePrivacy,
+  } = useTts();
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1306,6 +1319,13 @@ function App() {
     return () => clearTimeout(timer);
   }, [overlayState]);
 
+  /** Prefetch available TTS voices on mount. */
+  useEffect(() => {
+    fetchVoices().catch(() => {
+      /* fail silently — voices will be unavailable but app still works */
+    });
+  }, [fetchVoices]);
+
   /**
    * Handles mousedown on any surface of the application window.
    *
@@ -1429,6 +1449,14 @@ function App() {
                       onNewConversation={handleNewConversation}
                       onHistoryOpen={handleHistoryToggle}
                       onImagePreview={handleChatImagePreview}
+                      speakingMessageId={speakingMessageId}
+                      onSpeak={ttsSpeak}
+                      onStopSpeaking={ttsStop}
+                      privacyAcknowledged={privacyAcknowledged}
+                      onAcknowledgePrivacy={acknowledgePrivacy}
+                      ttsVoices={ttsVoices}
+                      selectedVoice={selectedVoice}
+                      onVoiceChange={setSelectedVoice}
                     />
                   ) : null}
                 </AnimatePresence>

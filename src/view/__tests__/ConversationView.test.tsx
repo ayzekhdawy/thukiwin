@@ -13,6 +13,14 @@ describe('ConversationView', () => {
         messages={messages}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
     expect(screen.getByText('Hello there')).toBeInTheDocument();
@@ -31,6 +39,14 @@ describe('ConversationView', () => {
         ]}
         isGenerating={true}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
     // Streamdown splits streaming text into per-word animated spans,
@@ -45,6 +61,14 @@ describe('ConversationView', () => {
         messages={[{ id: '1', role: 'assistant' as const, content: '' }]}
         isGenerating={true}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
     // New indicator: 9-dot spiral grid
@@ -60,6 +84,14 @@ describe('ConversationView', () => {
         ]}
         isGenerating={true}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
     const dots = container.querySelectorAll('.rounded-full.bg-primary\\/70');
@@ -69,7 +101,19 @@ describe('ConversationView', () => {
   it('renders WindowControls with onClose', () => {
     const onClose = vi.fn();
     render(
-      <ConversationView messages={[]} isGenerating={false} onClose={onClose} />,
+      <ConversationView
+        messages={[]}
+        isGenerating={false}
+        onClose={onClose}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
+      />,
     );
     expect(
       screen.getByRole('button', { name: 'Close window' }),
@@ -78,7 +122,19 @@ describe('ConversationView', () => {
 
   it('renders empty state with no messages (no .chat-bubble elements)', () => {
     const { container } = render(
-      <ConversationView messages={[]} isGenerating={false} onClose={vi.fn()} />,
+      <ConversationView
+        messages={[]}
+        isGenerating={false}
+        onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
+      />,
     );
     expect(container.querySelectorAll('.chat-bubble')).toHaveLength(0);
   });
@@ -89,6 +145,14 @@ describe('ConversationView', () => {
         messages={[{ id: '1', role: 'user' as const, content: 'first' }]}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
 
@@ -121,6 +185,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
     });
@@ -135,6 +207,14 @@ describe('ConversationView', () => {
         messages={[{ id: '1', role: 'user' as const, content: 'first' }]}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
 
@@ -165,6 +245,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
     });
@@ -183,6 +271,14 @@ describe('ConversationView', () => {
         ]}
         isGenerating={true}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
 
@@ -216,6 +312,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={false}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
     });
@@ -231,6 +335,14 @@ describe('ConversationView', () => {
         messages={[{ id: '1', role: 'user' as const, content: 'first' }]}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
 
@@ -281,6 +393,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
     });
@@ -294,6 +414,14 @@ describe('ConversationView', () => {
         messages={[{ id: '1', role: 'user' as const, content: 'first' }]}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
 
@@ -343,6 +471,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
     });
@@ -357,6 +493,14 @@ describe('ConversationView', () => {
         messages={[{ id: '1', role: 'user' as const, content: 'first' }]}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
 
@@ -387,6 +531,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
     });
@@ -400,6 +552,14 @@ describe('ConversationView', () => {
           isGenerating={false}
           onClose={vi.fn()}
           onHistoryOpen={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       expect(
@@ -413,6 +573,14 @@ describe('ConversationView', () => {
           messages={[]}
           isGenerating={false}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       expect(screen.queryByRole('button', { name: /history/i })).toBeNull();
@@ -426,6 +594,14 @@ describe('ConversationView', () => {
           isGenerating={false}
           onClose={vi.fn()}
           onHistoryOpen={onHistoryOpen}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       fireEvent.click(screen.getByRole('button', { name: /history/i }));
@@ -441,6 +617,14 @@ describe('ConversationView', () => {
           onSave={vi.fn()}
           isSaved={false}
           canSave={true}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument();
@@ -456,6 +640,14 @@ describe('ConversationView', () => {
           onSave={onSave}
           isSaved={false}
           canSave={true}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       fireEvent.click(screen.getByRole('button', { name: /save/i }));
@@ -471,6 +663,14 @@ describe('ConversationView', () => {
           onSave={vi.fn()}
           isSaved={false}
           canSave={false}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       const saveBtn = screen.getByRole('button', { name: /save/i });
@@ -486,6 +686,14 @@ describe('ConversationView', () => {
           onSave={vi.fn()}
           isSaved={true}
           canSave={true}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       const saveBtn = screen.getByRole('button', {
@@ -509,6 +717,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={false}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       expect(screen.getByTestId('thinking-block')).toBeInTheDocument();
@@ -527,6 +743,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       // The bubble should render with ThinkingBlock visible
@@ -547,6 +771,14 @@ describe('ConversationView', () => {
           ]}
           isGenerating={true}
           onClose={vi.fn()}
+          speakingMessageId={null}
+          onSpeak={vi.fn()}
+          onStopSpeaking={vi.fn()}
+          privacyAcknowledged={false}
+          onAcknowledgePrivacy={vi.fn()}
+          ttsVoices={[]}
+          selectedVoice="tr-TR-EmelNeural"
+          onVoiceChange={vi.fn()}
         />,
       );
       // TypingIndicator renders 9 pulsing dots
@@ -566,6 +798,14 @@ describe('ConversationView', () => {
         messages={messages}
         isGenerating={false}
         onClose={vi.fn()}
+        speakingMessageId={null}
+        onSpeak={vi.fn()}
+        onStopSpeaking={vi.fn()}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={vi.fn()}
+        ttsVoices={[]}
+        selectedVoice="tr-TR-EmelNeural"
+        onVoiceChange={vi.fn()}
       />,
     );
     for (let i = 0; i < 10; i++) {

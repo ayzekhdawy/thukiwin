@@ -80,6 +80,11 @@ export function enableChannelCaptureWithResponses(
       if (Object.prototype.hasOwnProperty.call(responses, cmd)) {
         return responses[cmd];
       }
+      // Default responses for commands that may be called implicitly
+      // by hooks (e.g., useTts fetches voices on mount).
+      if (cmd === 'tts_list_voices') {
+        return [];
+      }
     },
   );
 }
