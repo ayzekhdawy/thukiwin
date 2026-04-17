@@ -21,14 +21,13 @@ jobs:
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071  # v4.4.1
         id: release
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
   sync-cargo-lock:
     name: Sync Cargo.lock into release PR
     needs: release-please
-    # Runs when release-please opened/updated a PR but has not yet created a release
     if: ${{ !needs.release-please.outputs.release_created && needs.release-please.outputs.pr }}
     runs-on: ubuntu-latest
     steps:
@@ -40,9 +39,9 @@ jobs:
       - name: Install stable Rust toolchain
         run: rustup toolchain install stable --no-self-update
 
-      - name: Update Cargo.lock for thuki package
+      - name: Update Cargo.lock for thukiwin package
         working-directory: src-tauri
-        run: cargo update --package thuki
+        run: cargo update --package thukiwin
 
       - name: Commit Cargo.lock if it changed
         run: |
@@ -57,10 +56,10 @@ jobs:
           fi
 
   build-and-release:
-    name: Build and publish macOS app
+    name: Build and publish Windows app
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: macos-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -93,45 +92,12 @@ jobs:
       - name: Run all tests with coverage enforcement
         run: bun run test:all:coverage
 
-      - name: Build frontend
-        run: bun run build:frontend
-
-      - name: Build Tauri app
-        run: bun run build:backend
-
-      - name: Ad-hoc sign the app
-        run: |
-          codesign --deep --force --sign - src-tauri/target/release/bundle/macos/Thuki.app
-          codesign --verify --verbose src-tauri/target/release/bundle/macos/Thuki.app
-
-      - name: Install create-dmg
-        run: brew install create-dmg
-
-      - name: Create DMG installer
-        run: |
-          # Stage only the .app — exclude any leftover build artifacts
-          # (e.g. Thuki.app.tar.gz) from the bundle directory.
-          mkdir -p /tmp/thuki-dmg-src
-          cp -r src-tauri/target/release/bundle/macos/Thuki.app /tmp/thuki-dmg-src/
-
-          mkdir -p src-tauri/target/release/bundle/dmg
-          create-dmg \
-            --volname "Thuki" \
-            --background "src-tauri/assets/dmg-background.png" \
-            --window-pos 200 120 \
-            --window-size 600 380 \
-            --icon-size 128 \
-            --icon "Thuki.app" 170 170 \
-            --hide-extension "Thuki.app" \
-            --app-drop-link 430 170 \
-            "src-tauri/target/release/bundle/dmg/Thuki.dmg" \
-            "/tmp/thuki-dmg-src"
-
-          rm -rf /tmp/thuki-dmg-src
+      - name: Build Tauri app (NSIS installer)
+        run: npx tauri build
 
       - name: Upload release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ needs.release-please.outputs.tag_name }} \
-            src-tauri/target/release/bundle/dmg/Thuki.dmg
+          $installer = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1
+          gh release upload ${{ needs.release-please.outputs.tag_name }} $installer.FullName
