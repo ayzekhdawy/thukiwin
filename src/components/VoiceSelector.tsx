@@ -142,20 +142,22 @@ export function VoiceSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Close on Escape key.
+  // Close on Escape key (capture phase + stopPropagation to prevent the
+  // global Escape handler in App.tsx from also hiding the overlay).
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       /* v8 ignore next 2 */
       if (e.key === 'Escape') {
+        e.stopPropagation();
         setIsOpen(false);
         setSearch('');
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [isOpen]);
 
   const filteredVoices = search.trim()

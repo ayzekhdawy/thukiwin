@@ -134,6 +134,21 @@ describe('VoiceSelector', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('stops Escape propagation so global handler does not fire', () => {
+    const globalHandler = vi.fn();
+    window.addEventListener('keydown', globalHandler);
+    render(<VoiceSelector {...defaultProps} />);
+    const trigger = screen.getByLabelText('Select voice');
+    fireEvent.click(trigger);
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
+    // Global handler should NOT have been called because capture-phase
+    // stopPropagation prevents bubbling.
+    expect(globalHandler).not.toHaveBeenCalled();
+    window.removeEventListener('keydown', globalHandler);
+  });
+
   it('closes on click outside', () => {
     render(
       <div>

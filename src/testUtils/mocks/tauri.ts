@@ -45,9 +45,16 @@ export function getLastChannel(): Channel | null {
  */
 export function enableChannelCapture() {
   invoke.mockImplementation(
-    async (_cmd: string, args?: Record<string, unknown>) => {
+    async (cmd: string, args?: Record<string, unknown>) => {
       if (args && 'onEvent' in args) {
         lastChannel = args.onEvent as Channel;
+      }
+      // Return sensible defaults for commands that expect non-undefined values
+      if (cmd === 'list_conversations') {
+        return [];
+      }
+      if (cmd === 'tts_list_voices') {
+        return [];
       }
     },
   );

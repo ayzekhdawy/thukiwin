@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { SwitchConfirmation } from '../SwitchConfirmation';
 
@@ -75,5 +75,52 @@ describe('SwitchConfirmation', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('calls onCancel on Escape key', () => {
+    const onCancel = vi.fn();
+    render(
+      <SwitchConfirmation
+        onSaveAndSwitch={vi.fn()}
+        onJustSwitch={vi.fn()}
+        onCancel={onCancel}
+      />,
+    );
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('calls onSaveAndSwitch on Enter key', () => {
+    const onSaveAndSwitch = vi.fn();
+    render(
+      <SwitchConfirmation
+        onSaveAndSwitch={onSaveAndSwitch}
+        onJustSwitch={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Enter' });
+    });
+    expect(onSaveAndSwitch).toHaveBeenCalledOnce();
+  });
+
+  it('ignores other keys', () => {
+    const onSaveAndSwitch = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <SwitchConfirmation
+        onSaveAndSwitch={onSaveAndSwitch}
+        onJustSwitch={vi.fn()}
+        onCancel={onCancel}
+      />,
+    );
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Tab' });
+    });
+    expect(onSaveAndSwitch).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

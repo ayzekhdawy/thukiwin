@@ -4085,4 +4085,144 @@ describe('App', () => {
       // Should not throw — the catch handler silently swallows the error
     });
   });
+
+  describe('Keyboard shortcuts', () => {
+    it('starts new conversation on Ctrl+N', async () => {
+      render(<App />);
+      await act(async () => {});
+
+      await showOverlay();
+
+      // Submit a message so we have a conversation
+      const textarea = screen.getByPlaceholderText('Ask Thuki anything...');
+      act(() => {
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+      });
+      act(() => {
+        fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+      });
+      await act(async () => {});
+
+      // Simulate streaming tokens then done
+      const channel = getLastChannel();
+      await act(async () => {
+        channel?.simulateMessage({ type: 'Token', data: 'Hi' });
+      });
+      await act(async () => {
+        channel?.simulateMessage({ type: 'Done' });
+      });
+
+      // Press Ctrl+N — should start a new conversation
+      act(() => {
+        fireEvent.keyDown(window, { key: 'n', ctrlKey: true });
+      });
+
+      // After reset, the placeholder should return to the ask-bar text
+      await act(async () => {});
+    });
+
+    it('saves conversation on Ctrl+S', async () => {
+      render(<App />);
+      await act(async () => {});
+
+      await showOverlay();
+
+      // Submit a message
+      const textarea = screen.getByPlaceholderText('Ask Thuki anything...');
+      act(() => {
+        fireEvent.change(textarea, { target: { value: 'test save' } });
+      });
+      act(() => {
+        fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+      });
+      await act(async () => {});
+
+      const channel = getLastChannel();
+      await act(async () => {
+        channel?.simulateMessage({ type: 'Token', data: 'Response' });
+      });
+      await act(async () => {
+        channel?.simulateMessage({ type: 'Done' });
+      });
+
+      // Press Ctrl+S — should invoke save_conversation
+      act(() => {
+        fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+      });
+      await act(async () => {});
+
+      expect(invoke).toHaveBeenCalledWith('save_conversation', expect.any(Object));
+    });
+
+    it('toggles history on Ctrl+H', async () => {
+      render(<App />);
+      await act(async () => {});
+
+      await showOverlay();
+
+      // Press Ctrl+H — should toggle history panel
+      act(() => {
+        fireEvent.keyDown(window, { key: 'h', ctrlKey: true });
+      });
+      await act(async () => {});
+
+      // Press Ctrl+H again — should close it
+      act(() => {
+        fireEvent.keyDown(window, { key: 'h', ctrlKey: true });
+      });
+      await act(async () => {});
+    });
+
+    it('copies last response on Ctrl+Shift+C', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+
+      render(<App />);
+      await act(async () => {});
+
+      await showOverlay();
+
+      const textarea = screen.getByPlaceholderText('Ask Thuki anything...');
+      act(() => {
+        fireEvent.change(textarea, { target: { value: 'copy test' } });
+      });
+      act(() => {
+        fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+      });
+      await act(async () => {});
+
+      const channel = getLastChannel();
+      await act(async () => {
+        channel?.simulateMessage({ type: 'Token', data: 'My response' });
+      });
+      await act(async () => {
+        channel?.simulateMessage({ type: 'Done' });
+      });
+
+      // Press Ctrl+Shift+C
+      act(() => {
+        fireEvent.keyDown(window, { key: 'C', ctrlKey: true, shiftKey: true });
+      });
+      await act(async () => {});
+
+      expect(writeText).toHaveBeenCalledWith('My response');
+    });
+
+    it('does not copy when no assistant response exists', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+
+      render(<App />);
+      await act(async () => {});
+
+      await showOverlay();
+
+      act(() => {
+        fireEvent.keyDown(window, { key: 'C', ctrlKey: true, shiftKey: true });
+      });
+      await act(async () => {});
+
+      expect(writeText).not.toHaveBeenCalled();
+    });
+  });
 });

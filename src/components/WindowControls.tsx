@@ -133,7 +133,7 @@ export const WindowControls = memo(function WindowControls({
         <div className="flex items-center gap-1">
           {onSave !== undefined && (
             <Tooltip
-              label={isSaved ? 'Remove from history' : 'Save conversation'}
+              label={isSaved ? 'Remove from history (Ctrl+S)' : 'Save conversation (Ctrl+S)'}
             >
               <button
                 type="button"
@@ -156,7 +156,7 @@ export const WindowControls = memo(function WindowControls({
           )}
 
           {onNewConversation !== undefined && (
-            <Tooltip label="New conversation">
+            <Tooltip label="New conversation (Ctrl+N)">
               <button
                 type="button"
                 onClick={onNewConversation}
@@ -170,7 +170,7 @@ export const WindowControls = memo(function WindowControls({
           )}
 
           {onHistoryOpen !== undefined && (
-            <Tooltip label="Conversation history">
+            <Tooltip label="Conversation history (Ctrl+H)">
               <button
                 type="button"
                 onClick={onHistoryOpen}

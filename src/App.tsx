@@ -1288,17 +1288,46 @@ function App() {
     void getCurrentWindow().minimize();
   }, []);
 
-  /** Hide window on Escape or Cmd+W (macOS) / Ctrl+W. */
+  /** Copy the last assistant response to the clipboard. */
+  const handleCopyLastResponse = useCallback(() => {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (lastAssistant?.content) {
+      void navigator.clipboard.writeText(lastAssistant.content);
+    }
+  }, [messages]);
+
+  /** Global keyboard shortcuts: Escape/Ctrl+W hides overlay; Ctrl+N/S/H/Ctrl+Shift+C for actions. */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (((e.metaKey || e.ctrlKey) && e.key === 'w') || e.key === 'Escape') {
         e.preventDefault();
         handleCloseOverlay();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        handleNewConversation();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's' && !e.shiftKey) {
+        e.preventDefault();
+        void handleSave();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'h' && !e.shiftKey) {
+        e.preventDefault();
+        handleHistoryToggle();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        handleCopyLastResponse();
+        return;
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleCloseOverlay]);
+  }, [handleCloseOverlay, handleNewConversation, handleSave, handleHistoryToggle, handleCopyLastResponse]);
 
   /** Programmatic focus when the overlay becomes visible. */
   useEffect(() => {
