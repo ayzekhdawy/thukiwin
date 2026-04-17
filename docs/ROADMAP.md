@@ -1,61 +1,61 @@
 # ThukiWin Feature Roadmap
 
 ## In Progress
-- [ ] Klavye shortcut'ları (Escape, Ctrl+N, Ctrl+S, Ctrl+H, Ctrl+Shift+C)
+- [ ] Keyboard shortcuts (Escape, Ctrl+N, Ctrl+S, Ctrl+H, Ctrl+Shift+C)
 
-## Planned — Easy (1-3 saat each)
+## Planned — Easy (1-3 hours each)
 
-### Model Seçme UI
-- UI'dan aktif Ollama modelini değiştirme dropdown'u
-- Mevcut `THUKI_SUPPORTED_AI_MODELS` env var'ı ile entegre
-- WindowControls veya AskBar'a model indicator ekle
-- Dosyalar: `src/App.tsx`, `src/hooks/useOllama.ts`, `src/components/ModelSelector.tsx` (yeni)
+### Model Selection UI
+- Dropdown to change the active Ollama model from the UI
+- Integrate with the existing `THUKI_SUPPORTED_AI_MODELS` env var
+- Add model indicator to WindowControls or AskBar
+- Files: `src/App.tsx`, `src/hooks/useOllama.ts`, `src/components/ModelSelector.tsx` (new)
 
-### Tray Bildirimleri
-- AI yanıtı tamamlandığında Windows notification göster
-- Kullanıcı başka app'deyken farkındalık
-- `tauri-plugin-notification` veya Windows toast notification
-- Dosyalar: `src-tauri/Cargo.toml`, `src/hooks/useOllama.ts`, `src-tauri/src/lib.rs`
+### Tray Notifications
+- Show a Windows notification when AI response completes
+- Awareness when the user is in another app
+- `tauri-plugin-notification` or Windows toast notification
+- Files: `src-tauri/Cargo.toml`, `src/hooks/useOllama.ts`, `src-tauri/src/lib.rs`
 
 ### Markdown Export
-- Konuşmaları `.md` dosyası olarak dışa aktarma
-- History panel'e "Export" butonu ekle
-- Dosyalar: `src/components/HistoryPanel.tsx`, `src/hooks/useConversationHistory.ts`
+- Export conversations as `.md` files
+- Add "Export" button to history panel
+- Files: `src/components/HistoryPanel.tsx`, `src/hooks/useConversationHistory.ts`
 
-## Planned — Medium (4-5 saat each)
+## Planned — Medium (4-5 hours each)
 
-### Konuşma Arama
-- SQLite FTS5 ile tam metin arama
-- History panel'e search bar ekle
-- Anlık sonuçlar (debounce ile)
-- Dosyalar: `src-tauri/src/database.rs`, `src-tauri/src/history.rs`, `src/components/HistoryPanel.tsx`
+### Conversation Search
+- Full-text search with SQLite FTS5
+- Add search bar to history panel
+- Instant results (with debounce)
+- Files: `src-tauri/src/database.rs`, `src-tauri/src/history.rs`, `src/components/HistoryPanel.tsx`
 
 ### Prompt Templates
-- Kullanıcı özel prompt şablonları kaydedebilme
-- Slash commands gibi çalışan ama kullanıcı tanımlı
-- localStorage veya SQLite'da saklama
-- Dosyalar: `src/config/commands.ts`, `src/components/TemplateManager.tsx` (yeni)
+- Allow users to save custom prompt templates
+- Works like slash commands but user-defined
+- Store in localStorage or SQLite
+- Files: `src/config/commands.ts`, `src/components/TemplateManager.tsx` (new)
 
 ### Pinned Conversations
-- Sık kullanılan konuşmaları sabitleme
-- Her açılışta hazır olma
-- History panel'de pin ikonu
-- Dosyalar: `src-tauri/src/database.rs`, `src-tauri/src/history.rs`, `src/components/HistoryPanel.tsx`
+- Pin frequently used conversations
+- Ready on every launch
+- Pin icon in history panel
+- Files: `src-tauri/src/database.rs`, `src-tauri/src/history.rs`, `src/components/HistoryPanel.tsx`
 
-## Planned — Hard (1-3 gün each)
+## Planned — Hard (1-3 days each)
 
-### Vision / Model İyileştirme
-- Ollama multimodal modelleriyle resim analizi
-- `/screen` sonrası model bazlı iyileştirme
-- Model özellik algılama (vision capable mı)
-- Dosyalar: `src/hooks/useOllama.ts`, `src/App.tsx`, `src-tauri/src/commands.rs`
+### Vision / Model Improvement
+- Image analysis with Ollama multimodal models
+- Model-based improvement after `/screen`
+- Model feature detection (is it vision capable?)
+- Files: `src/hooks/useOllama.ts`, `src/App.tsx`, `src-tauri/src/commands.rs`
 
-### Plugin / Extension Sistemi
-- Üçüncü taraf araç entegrasyonları (web arama, dosya okuma)
-- Güvenlik: sandbox içinde çalıştırma
-- Dosyalar: Yeni modül `src-tauri/src/plugins.rs`, `src/plugins/` (yeni dizin)
+### Plugin / Extension System
+- Third-party tool integrations (web search, file reading)
+- Security: run inside sandbox
+- Files: New module `src-tauri/src/plugins.rs`, `src/plugins/` (new directory)
 
-### Split-View Modu
-- Yan yana iki konuşma penceresi
-- Birinde referans metin, diğerinde AI yanıtı
-- Dosyalar: `src/App.tsx`, `src/view/ConversationView.tsx`, `src/view/SplitView.tsx` (yeni)
+### Split-View Mode
+- Side-by-side dual conversation windows
+- Reference text in one, AI response in the other
+- Files: `src/App.tsx`, `src/view/ConversationView.tsx`, `src/view/SplitView.tsx` (new)
