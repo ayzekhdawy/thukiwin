@@ -1,9 +1,7 @@
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import thukiLogo from '../../../src-tauri/icons/128x128.png';
-
-/** Detect if we're running on Windows. */
-const isWindows = navigator.userAgent.includes('Windows');
+import { isWindows } from '../../utils/platform';
 
 interface Props {
   onComplete: () => void;
@@ -88,12 +86,12 @@ export function IntroStep({ onComplete }: Props) {
             title={
               <>
                 <span>Double-tap</span>{' '}
-                <KeyChip>{isWindows ? 'Ctrl' : '⌃'}</KeyChip>{' '}
+                <KeyChip>{isWindows() ? 'Ctrl' : '⌃'}</KeyChip>{' '}
                 <span>to summon</span>
               </>
             }
             desc={
-              isWindows
+              isWindows()
                 ? 'Press Ctrl twice from any app, any time'
                 : 'Press Control twice from any app, any time'
             }
@@ -103,7 +101,7 @@ export function IntroStep({ onComplete }: Props) {
             title={
               <>
                 <span>Select text, then double-tap</span>{' '}
-                <KeyChip>{isWindows ? 'Ctrl' : '⌃'}</KeyChip>
+                <KeyChip>{isWindows() ? 'Ctrl' : '⌃'}</KeyChip>
               </>
             }
             desc="It opens with your selection already quoted as context"

@@ -7,6 +7,7 @@ const mockWindow = {
   show: vi.fn(async () => {}),
   setFocus: vi.fn(async () => {}),
   startDragging: vi.fn(async () => {}),
+  minimize: vi.fn(async () => {}),
 };
 
 export function getCurrentWindow() {

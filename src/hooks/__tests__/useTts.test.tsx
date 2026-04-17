@@ -114,14 +114,15 @@ describe('useTts', () => {
     // Mock window.Audio to prevent real playback
     const mockAudio = {
       play: vi.fn().mockResolvedValue(undefined),
-      onended: null,
-      onerror: null,
+      onended: null as (() => void) | null,
+      onerror: null as (() => void) | null,
       src: '',
+      pause: vi.fn(),
     };
-    vi.stubGlobal(
-      'Audio',
-      vi.fn(() => mockAudio),
-    );
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
     // Mock URL.createObjectURL and revokeObjectURL
     vi.stubGlobal('URL', {
       ...URL,
@@ -144,6 +145,262 @@ describe('useTts', () => {
       pitch: '+0%',
     });
 
+    vi.unstubAllGlobals();
+  });
+
+  it('cleans up on audio onended', async () => {
+    let onendedCallback: (() => void) | null = null;
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      set onended(cb: (() => void) | null) {
+        onendedCallback = cb;
+      },
+      get onended() {
+        return onendedCallback;
+      },
+      onerror: null as (() => void) | null,
+      src: '',
+      pause: vi.fn(),
+    };
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const base64Mp3 = btoa('fake audio data');
+    mockInvoke.mockResolvedValueOnce(base64Mp3);
+
+    const { result } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    expect(result.current.isSpeaking).toBe(true);
+
+    // Trigger the onended handler
+    await act(async () => {
+      onendedCallback!();
+    });
+
+    expect(result.current.isSpeaking).toBe(false);
+    expect(result.current.speakingMessageId).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('cleans up on audio onerror', async () => {
+    let onerrorCallback: (() => void) | null = null;
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      set onended(_cb: (() => void) | null) {
+        // no-op
+      },
+      get onended() {
+        return null;
+      },
+      set onerror(cb: (() => void) | null) {
+        onerrorCallback = cb;
+      },
+      get onerror() {
+        return onerrorCallback;
+      },
+      src: '',
+      pause: vi.fn(),
+    };
+    // Use a function constructor so vitest doesn't warn
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const base64Mp3 = btoa('fake audio data');
+    mockInvoke.mockResolvedValueOnce(base64Mp3);
+
+    const { result } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    // Trigger the onerror handler
+    await act(async () => {
+      onerrorCallback!();
+    });
+
+    expect(result.current.isSpeaking).toBe(false);
+    expect(result.current.speakingMessageId).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('cleans up on unmount', async () => {
+    const mockPause = vi.fn();
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      onended: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      src: '',
+      pause: mockPause,
+    };
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    const mockRevoke = vi.fn();
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: mockRevoke,
+    });
+
+    const base64Mp3 = btoa('fake audio data');
+    mockInvoke.mockResolvedValueOnce(base64Mp3);
+
+    const { result, unmount } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    // Unmount triggers the cleanup effect
+    unmount();
+
+    expect(mockRevoke).toHaveBeenCalledWith('blob:test');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('handles cancelled string error from Tauri', async () => {
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      onended: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      src: '',
+      pause: vi.fn(),
+    };
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    // Tauri returns 'cancelled' as a string error
+    mockInvoke.mockRejectedValueOnce('cancelled');
+
+    const { result } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    expect(result.current.isSpeaking).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('handles Error with cancelled message', async () => {
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      onended: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      src: '',
+      pause: vi.fn(),
+    };
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    mockInvoke.mockRejectedValueOnce(new Error('cancelled'));
+
+    const { result } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    expect(result.current.isSpeaking).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('handles empty base64 response by cleaning up', async () => {
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      onended: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      src: '',
+      pause: vi.fn(),
+    };
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    // Return empty string — should trigger cleanup
+    mockInvoke.mockResolvedValueOnce('');
+
+    const { result } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    expect(result.current.isSpeaking).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('logs error on non-cancelled TTS failure', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockAudio = {
+      play: vi.fn().mockResolvedValue(undefined),
+      onended: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      src: '',
+      pause: vi.fn(),
+    };
+    vi.stubGlobal('Audio', function (url: string) {
+      mockAudio.src = url;
+      return mockAudio;
+    });
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    // Non-cancelled error — should log
+    mockInvoke.mockRejectedValueOnce(new Error('Network failure'));
+
+    const { result } = renderHook(() => useTts());
+    await act(async () => {
+      await result.current.speak('msg1', 'Hello');
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith('TTS error:', expect.any(Error));
+    expect(result.current.isSpeaking).toBe(false);
+
+    consoleSpy.mockRestore();
     vi.unstubAllGlobals();
   });
 });

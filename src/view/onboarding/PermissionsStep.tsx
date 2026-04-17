@@ -3,9 +3,7 @@ import type React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import thukiLogo from '../../../src-tauri/icons/128x128.png';
-
-/** Detect if we're running on Windows. */
-const isWindows = navigator.userAgent.includes('Windows');
+import { isWindows } from '../../utils/platform';
 
 /** How often to poll for permission grants after the user requests them. */
 const POLL_INTERVAL_MS = 500;
@@ -155,9 +153,9 @@ const Spinner = () => (
  */
 export function PermissionsStep() {
   const [accessibilityStatus, setAccessibilityStatus] =
-    useState<AccessibilityStatus>(isWindows ? 'granted' : 'pending');
+    useState<AccessibilityStatus>(isWindows() ? 'granted' : 'pending');
   const [screenRecordingStatus, setScreenRecordingStatus] =
-    useState<ScreenRecordingStatus>(isWindows ? 'granted' : 'idle');
+    useState<ScreenRecordingStatus>(isWindows() ? 'granted' : 'idle');
   const axPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const screenPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Guards that prevent a new poll tick from firing while a previous invoke
@@ -170,7 +168,7 @@ export function PermissionsStep() {
 
   // On Windows, all permissions are granted by default — skip to completion.
   useEffect(() => {
-    if (isWindows) {
+    if (isWindows()) {
       // On Windows, auto-complete the onboarding permissions step.
       // The backend already knows permissions are granted, so we just
       // need to advance the frontend state.
@@ -385,8 +383,8 @@ export function PermissionsStep() {
               </div>
               <div style={{ fontSize: 12, color: '#6b6660', lineHeight: 1.5 }}>
                 Lets Thuki respond to activator key (
-                <KeyChip label={isWindows ? 'Ctrl' : '⌃'} />
-                <KeyChip label={isWindows ? 'Ctrl' : '⌃'} />)
+                <KeyChip label={isWindows() ? 'Ctrl' : '⌃'} />
+                <KeyChip label={isWindows() ? 'Ctrl' : '⌃'} />)
               </div>
             </div>
             {accessibilityGranted && (
@@ -485,7 +483,7 @@ export function PermissionsStep() {
                     margin: 0,
                   }}
                 >
-                  {isWindows
+                  {isWindows()
                     ? 'Permissions are ready — restarting to complete setup'
                     : 'macOS requires a restart for Screen Recording to take effect'}
                 </p>

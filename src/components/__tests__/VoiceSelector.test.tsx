@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { VoiceSelector } from '../VoiceSelector';
 import type { TtsVoice } from '../../hooks/useTts';
 
@@ -126,7 +126,9 @@ describe('VoiceSelector', () => {
     const trigger = screen.getByLabelText('Select voice');
     fireEvent.click(trigger);
     expect(screen.getByPlaceholderText('Search voices...')).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
     expect(
       screen.queryByPlaceholderText('Search voices...'),
     ).not.toBeInTheDocument();
@@ -142,7 +144,9 @@ describe('VoiceSelector', () => {
     const trigger = screen.getByLabelText('Select voice');
     fireEvent.click(trigger);
     expect(screen.getByPlaceholderText('Search voices...')).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByTestId('outside'));
+    act(() => {
+      fireEvent.mouseDown(screen.getByTestId('outside'));
+    });
     expect(
       screen.queryByPlaceholderText('Search voices...'),
     ).not.toBeInTheDocument();
@@ -157,5 +161,59 @@ describe('VoiceSelector', () => {
     expect(turkishHeader.compareDocumentPosition(englishHeader)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+  });
+
+  it('sorts groups by locale when selected voice is not in any group', () => {
+    render(
+      <VoiceSelector
+        voices={mockVoices}
+        selectedVoice="de-DE-KatjaNeural"
+        onVoiceChange={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByLabelText('Select voice');
+    fireEvent.click(trigger);
+    // Neither tr nor en is the selected locale, so groups are sorted alphabetically
+    const englishHeader = screen.getByText('English');
+    const turkishHeader = screen.getByText('Turkish');
+    // English (E) comes before Turkish (T) alphabetically
+    expect(englishHeader.compareDocumentPosition(turkishHeader)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it('shows raw locale code for unknown languages', () => {
+    const xxVoice: TtsVoice = {
+      name: 'XX Voice',
+      ShortName: 'xx-XX-Voice',
+      gender: 'Female',
+      Locale: 'xx-XX',
+      SuggestedCodec: 'audio-24khz-48kbitrate-mono-mp3',
+    };
+    render(
+      <VoiceSelector
+        voices={[xxVoice]}
+        selectedVoice="xx-XX-Voice"
+        onVoiceChange={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByLabelText('Select voice');
+    fireEvent.click(trigger);
+    // Unknown locale "xx" should show as-is since it's not in LOCALE_NAMES
+    expect(screen.getByText('xx')).toBeInTheDocument();
+  });
+
+  it('closes dropdown and clears search when selecting a voice', () => {
+    render(<VoiceSelector {...defaultProps} />);
+    const trigger = screen.getByLabelText('Select voice');
+    fireEvent.click(trigger);
+    const input = screen.getByPlaceholderText('Search voices...');
+    fireEvent.change(input, { target: { value: 'Jenny' } });
+    const voiceButton = screen.getByText('en-US-JennyNeural');
+    fireEvent.click(voiceButton);
+    // Dropdown should close
+    expect(
+      screen.queryByPlaceholderText('Search voices...'),
+    ).not.toBeInTheDocument();
   });
 });

@@ -1326,9 +1326,7 @@ function App() {
 
   /** Prefetch available TTS voices on mount. */
   useEffect(() => {
-    fetchVoices().catch(() => {
-      /* fail silently — voices will be unavailable but app still works */
-    });
+    void fetchVoices();
   }, [fetchVoices]);
 
   /**

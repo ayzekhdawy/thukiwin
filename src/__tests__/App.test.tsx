@@ -4034,4 +4034,55 @@ describe('App', () => {
       expect(screen.queryByText('Before you dive in')).toBeNull();
     });
   });
+
+  describe('Minimize', () => {
+    it('calls getCurrentWindow().minimize() on minimize button click', async () => {
+      render(<App />);
+      await act(async () => {});
+
+      await showOverlay();
+
+      const textarea = screen.getByPlaceholderText('Ask Thuki anything...');
+      fireEvent.change(textarea, { target: { value: 'hi' } });
+
+      // Submit with Enter
+      act(() => {
+        fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+      });
+
+      // Wait for invoke
+      await act(async () => {});
+
+      // Simulate streaming tokens to enter chat mode
+      act(() => {
+        getLastChannel()?.simulateMessage({ type: 'Token', data: 'Hello' });
+        getLastChannel()?.simulateMessage({ type: 'Done' });
+      });
+
+      await act(async () => {});
+
+      const minimizeBtn = screen.getByRole('button', { name: 'Minimize' });
+      fireEvent.click(minimizeBtn);
+
+      expect(__mockWindow.minimize).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('TTS voice prefetch', () => {
+    it('handles fetchVoices rejection silently', async () => {
+      // Make tts_list_voices reject so the useTts fetchVoices().catch() handler is exercised
+      invoke.mockImplementation(async (cmd: string) => {
+        if (cmd === 'tts_list_voices') {
+          throw new Error('TTS unavailable');
+        }
+        return undefined;
+      });
+      render(<App />);
+      await act(async () => {});
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      // Should not throw — the catch handler silently swallows the error
+    });
+  });
 });

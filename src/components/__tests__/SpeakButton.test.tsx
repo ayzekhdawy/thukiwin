@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SpeakButton } from '../SpeakButton';
 
@@ -210,5 +210,69 @@ describe('SpeakButton', () => {
     );
     const button = screen.getByRole('button', { name: 'Read aloud' });
     expect(button.classList.contains('text-white/40')).toBe(true);
+  });
+
+  it('auto-hides privacy tooltip after timeout', () => {
+    vi.useFakeTimers();
+    render(
+      <SpeakButton
+        content="Hello"
+        messageId="m1"
+        align="left"
+        isSpeaking={false}
+        onSpeak={mockOnSpeak}
+        onStop={mockOnStop}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={mockOnAcknowledgePrivacy}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Read aloud' }));
+    expect(
+      screen.getByText(/Text will be sent to Microsoft servers/i),
+    ).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
+
+    expect(
+      screen.queryByText(/Text will be sent to Microsoft servers/i),
+    ).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('clears existing timer when showing privacy tooltip again', () => {
+    vi.useFakeTimers();
+    render(
+      <SpeakButton
+        content="Hello"
+        messageId="m1"
+        align="left"
+        isSpeaking={false}
+        onSpeak={mockOnSpeak}
+        onStop={mockOnStop}
+        privacyAcknowledged={false}
+        onAcknowledgePrivacy={mockOnAcknowledgePrivacy}
+      />,
+    );
+    // Show tooltip
+    fireEvent.click(screen.getByRole('button', { name: 'Read aloud' }));
+    expect(
+      screen.getByText(/Text will be sent to Microsoft servers/i),
+    ).toBeInTheDocument();
+
+    // Dismiss, then show again — clears the old timer
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Read aloud' }));
+
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
+    expect(
+      screen.queryByText(/Text will be sent to Microsoft servers/i),
+    ).toBeNull();
+
+    vi.useRealTimers();
   });
 });

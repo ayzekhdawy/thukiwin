@@ -2,10 +2,18 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { IntroStep } from '../IntroStep';
 import { invoke } from '../../../testUtils/mocks/tauri';
+import { isWindows } from '../../../utils/platform';
+
+vi.mock('../../../utils/platform', () => ({
+  isWindows: vi.fn(() => false),
+}));
+
+const mockIsWindows = isWindows as unknown as ReturnType<typeof vi.fn>;
 
 describe('IntroStep', () => {
   beforeEach(() => {
     invoke.mockClear();
+    mockIsWindows.mockReturnValue(false);
   });
 
   it('renders the title', () => {
@@ -55,5 +63,19 @@ describe('IntroStep', () => {
 
     expect(invoke).toHaveBeenCalledWith('finish_onboarding');
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Ctrl key chip on Windows', () => {
+    mockIsWindows.mockReturnValue(true);
+    render(<IntroStep onComplete={vi.fn()} />);
+    const ctrlChips = screen.getAllByText('Ctrl');
+    expect(ctrlChips.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows control symbol key chip on non-Windows', () => {
+    mockIsWindows.mockReturnValue(false);
+    render(<IntroStep onComplete={vi.fn()} />);
+    const ctrlChips = screen.getAllByText('⌃');
+    expect(ctrlChips.length).toBeGreaterThanOrEqual(1);
   });
 });
