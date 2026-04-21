@@ -24,6 +24,11 @@ export const COMMANDS: readonly Command[] = [
     description: 'Capture your screen and include it as context',
   },
   {
+    trigger: '/do',
+    label: '/do',
+    description: 'Agent mode: autonomously control your desktop',
+  },
+  {
     trigger: '/think',
     label: '/think',
     description: 'Think deeply before answering',
