@@ -11,7 +11,7 @@ const POLL_INTERVAL_MS = 500;
 type AccessibilityStatus = 'pending' | 'requesting' | 'granted';
 type ScreenRecordingStatus = 'idle' | 'polling' | 'granted';
 
-/** Inline macOS-style keyboard key chip for showing hotkey symbols. */
+/** Inline keyboard key chip for showing hotkey symbols. */
 const KeyChip = ({ label }: { label: string }) => (
   <span
     style={{
@@ -28,7 +28,7 @@ const KeyChip = ({ label }: { label: string }) => (
       color: 'rgba(255,255,255,0.75)',
       verticalAlign: 'middle',
       margin: '0 1px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: "system-ui, 'Segoe UI Variable', 'Segoe UI', sans-serif",
     }}
   >
     {label}
@@ -139,17 +139,17 @@ const Spinner = () => (
 );
 
 /**
- * Onboarding screen shown at first launch when required macOS permissions
+ * Onboarding screen shown at first launch when required permissions
  * (Accessibility and Screen Recording) have not yet been granted.
  *
  * Follows a sequential flow: Accessibility first (polls until granted,
- * no restart needed), then Screen Recording (registers app via
- * CGRequestScreenCaptureAccess, polls TCC until granted, then prompts
- * quit+reopen since macOS requires a restart for the permission to take effect).
+ * no restart needed), then Screen Recording (registers app, polls until
+ * granted, then prompts quit+reopen since a restart is required for the
+ * permission to take effect).
  *
  * Visual direction: Warm Ambient: dark base with a warm orange radial glow.
  * The outer container is transparent so the rounded panel corners are visible
- * against the macOS desktop.
+ * against the desktop.
  */
 export function PermissionsStep() {
   const [accessibilityStatus, setAccessibilityStatus] =
@@ -229,9 +229,10 @@ export function PermissionsStep() {
   }, [stopAxPolling]);
 
   const handleOpenScreenRecording = useCallback(async () => {
-    // Register Thuki in TCC (adds it to the Screen Recording list) then open
-    // System Settings directly so the user can toggle it on without hunting.
-    // The registration call may briefly show a macOS system prompt on first use.
+    // Request screen recording access then open system settings so the user
+    // can grant it. On macOS, this registers the app in the Screen Recording
+    // privacy pane (TCC). On Windows, permissions are auto-granted and this
+    // path is not reached.
     await invoke('request_screen_recording_access');
     await invoke('open_screen_recording_settings');
     if (!mountedRef.current) return;
@@ -265,7 +266,7 @@ export function PermissionsStep() {
 
   return (
     // Transparent outer container so the rounded panel corners show through
-    // against the macOS desktop (window has transparent: true in tauri.conf.json).
+    // against the desktop (window has transparent: true in tauri.conf.json).
     <div
       style={{
         minHeight: '100vh',
@@ -273,7 +274,7 @@ export function PermissionsStep() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'transparent',
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+        fontFamily: "Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
       }}
     >
       <motion.div
@@ -287,8 +288,8 @@ export function PermissionsStep() {
           border: '1px solid rgba(255, 141, 92, 0.2)',
           borderRadius: 24,
           padding: '32px 26px 26px',
-          // Drop shadow handled by native macOS (set_has_shadow(true) in
-          // show_onboarding_window). CSS provides the warm inner glow only.
+          // Drop shadow handled by the OS window manager. CSS provides the
+          // warm inner glow only.
           boxShadow: '0 0 40px rgba(255,100,40,0.07)',
           position: 'relative',
           overflow: 'hidden',
@@ -485,7 +486,7 @@ export function PermissionsStep() {
                 >
                   {isWindows()
                     ? 'Permissions are ready — restarting to complete setup'
-                    : 'macOS requires a restart for Screen Recording to take effect'}
+                    : 'A restart is required for Screen Recording to take effect'}
                 </p>
               </>
             )}

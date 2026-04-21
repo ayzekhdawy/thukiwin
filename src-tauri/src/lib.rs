@@ -828,6 +828,8 @@ pub fn run() {
         builder = builder.plugin(tauri_nspanel::init());
     }
 
+    builder = builder.plugin(tauri_plugin_notification::init());
+
     builder
         .setup(|app| {
             #[cfg(target_os = "macos")]

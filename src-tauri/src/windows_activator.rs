@@ -25,7 +25,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL,
 };
 
-use crate::context::ActivationContext;
+use crate::context::{ActivationContext, ScreenRect};
+
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetGUIThreadInfo, GetWindowRect, GUITHREADINFO,
+};
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -333,12 +337,51 @@ fn clipboard_fallback() -> Option<String> {
     }
 }
 
+/// Attempts to get the bounding rectangle of the focused UI element.
+/// Uses GetGUIThreadInfo to find the focused control and GetWindowRect
+/// as a fallback. This provides approximate bounds for window positioning.
+fn get_focused_element_bounds() -> Option<ScreenRect> {
+    unsafe {
+        let mut gui_info = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+
+        // Get info about the foreground thread's UI state.
+        if GetGUIThreadInfo(0, &mut gui_info).is_err() {
+            return None;
+        }
+
+        // If we have a focused control handle, get its screen rectangle.
+        let hwnd = if !gui_info.hwndFocus.is_invalid() && !gui_info.hwndFocus.0.is_null() {
+            gui_info.hwndFocus
+        } else if !gui_info.hwndActive.is_invalid() && !gui_info.hwndActive.0.is_null() {
+            gui_info.hwndActive
+        } else {
+            return None;
+        };
+
+        let mut rect = std::mem::zeroed();
+        if GetWindowRect(hwnd, &mut rect).is_ok() {
+            Some(ScreenRect {
+                x: rect.left as f64,
+                y: rect.top as f64,
+                width: (rect.right - rect.left) as f64,
+                height: (rect.bottom - rect.top) as f64,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 pub fn capture() -> ActivationContext {
     let mouse = current_mouse_position();
     let text = clipboard_fallback();
+    let bounds = get_focused_element_bounds();
     ActivationContext {
         selected_text: text,
-        bounds: None,
+        bounds,
         mouse_position: Some(mouse),
     }
 }

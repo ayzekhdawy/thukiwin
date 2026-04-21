@@ -34,6 +34,10 @@ export default defineConfig({
         'src/testUtils/mocks/tauri-window.ts',
       ),
       'framer-motion': resolve(__dirname, 'src/testUtils/mocks/framer-motion.tsx'),
+      '@tauri-apps/plugin-notification': resolve(
+        __dirname,
+        'src/testUtils/mocks/tauri-notification.ts',
+      ),
     },
   },
 });

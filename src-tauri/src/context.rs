@@ -1,11 +1,12 @@
 //! Captures contextual information at the moment of overlay activation.
 //!
-//! Queries the macOS Accessibility API to detect any currently selected text
+//! Queries the platform Accessibility API to detect any currently selected text
 //! and its screen bounds. Falls back gracefully when the focused app does not
 //! fully implement the AX protocol.
 //!
 //! `ActivationContext` and `calculate_window_position` are cross-platform.
-//! The AX capture implementation is macOS-only.
+//! The AX capture implementation is macOS-only; Windows uses its own
+//! context capture in `windows_activator`.
 
 // ─── Cross-platform public types ─────────────────────────────────────────────
 
@@ -353,8 +354,14 @@ const ANCHOR_OFFSET_Y: f64 = 2.0;
 const WINDOW_BOTTOM_PADDING: f64 = 32.0;
 /// Minimum distance from any screen edge (logical pts).
 pub(crate) const SCREEN_MARGIN: f64 = 16.0;
-/// macOS menu bar height approximation (logical pts).
+/// Menu bar height offset (logical pts). On macOS this accounts for the system
+/// menu bar at the top of the screen; on Windows there is no such offset.
+#[cfg(target_os = "macos")]
 pub(crate) const MENU_BAR_HEIGHT: f64 = 24.0;
+#[cfg(target_os = "windows")]
+pub(crate) const MENU_BAR_HEIGHT: f64 = 0.0;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub(crate) const MENU_BAR_HEIGHT: f64 = 0.0;
 /// Result of the window placement calculation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowPlacement {
@@ -554,11 +561,12 @@ mod tests {
     }
 
     #[test]
-    fn selection_near_top_clamps_to_menu_bar() {
-        // Selection near top of screen: below_y = 18, clamped to y_min = 40.
-        let ctx = ctx_with_bounds(100.0, 0.0, 80.0, 20.0);
+    fn selection_near_top_clamps_to_min_y() {
+        // Selection near top of screen: below_y = 10 - 2 = 8, clamped to y_min.
+        let ctx = ctx_with_bounds(100.0, 0.0, 80.0, 10.0);
         let p = calculate_window_position(&ctx, SW, SH, WW, WH);
-        assert_eq!(p.y, MENU_BAR_HEIGHT + SCREEN_MARGIN);
+        let y_min = MENU_BAR_HEIGHT + SCREEN_MARGIN;
+        assert_eq!(p.y, y_min);
     }
 
     #[test]
@@ -581,20 +589,21 @@ mod tests {
 
     #[test]
     fn y_flips_above_when_selection_near_screen_bottom() {
-        // Selection: y=870, h=20. below_y=888. 888+80=968 > 884 → flip above.
-        // fixed_bottom = min(870-2+32, 900) = 900. y = (900-80).max(40) = 820.
+        // Selection: y=870, h=20. below_y=888. 888+80=968 > (SH - SCREEN_MARGIN) → flip above.
+        // fixed_bottom = min(870-2+32, 900) = 900. y = (900-80).max(y_min) = 820.
         let ctx = ctx_with_bounds(100.0, 870.0, 80.0, 20.0);
         let p = calculate_window_position(&ctx, SW, SH, WW, WH);
         assert_eq!(p.y, 820.0);
     }
 
     #[test]
-    fn y_is_clamped_when_near_menu_bar() {
-        // Selection bottom at 30 → below_y = 28. 28+80=108 < 884 → no flip.
-        // below_y.max(y_min) = 28.max(40) = 40.
-        let ctx = ctx_with_bounds(100.0, 10.0, 80.0, 20.0);
+    fn y_is_clamped_when_near_top_edge() {
+        // Selection bottom at 12 → below_y = 10. 10+80=90 < 884 → no flip.
+        // below_y.max(y_min) = 10.max(MENU_BAR_HEIGHT + SCREEN_MARGIN).
+        let ctx = ctx_with_bounds(100.0, 0.0, 80.0, 12.0);
         let p = calculate_window_position(&ctx, SW, SH, WW, WH);
-        assert_eq!(p.y, MENU_BAR_HEIGHT + SCREEN_MARGIN);
+        let y_min = MENU_BAR_HEIGHT + SCREEN_MARGIN;
+        assert_eq!(p.y, y_min);
     }
 
     #[test]

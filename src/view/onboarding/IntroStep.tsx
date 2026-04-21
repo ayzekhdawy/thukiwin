@@ -21,7 +21,7 @@ export function IntroStep({ onComplete }: Props) {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'transparent',
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+        fontFamily: "Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
       }}
     >
       <motion.div
@@ -273,7 +273,7 @@ function MonoChip({ children }: { children: React.ReactNode }) {
         borderRadius: 4,
         fontSize: 11,
         color: 'rgba(255,141,92,0.75)',
-        fontFamily: "'SF Mono', 'Fira Mono', monospace",
+        fontFamily: "'Cascadia Code', 'Consolas', 'Fira Mono', monospace",
         lineHeight: 1.5,
         verticalAlign: 'middle',
       }}
