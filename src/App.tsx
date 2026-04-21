@@ -15,6 +15,9 @@ import { useOllama } from './hooks/useOllama';
 import type { Message } from './hooks/useOllama';
 import { useTts } from './hooks/useTts';
 import { useConversationHistory } from './hooks/useConversationHistory';
+import { useAgentMode } from './hooks/useAgentMode';
+import { AgentIndicator } from './components/AgentIndicator';
+import { MinibarView } from './components/MinibarView';
 import { ConversationView } from './view/ConversationView';
 import { AskBarView, MAX_IMAGES } from './view/AskBarView';
 import { OnboardingView } from './view/onboarding/index';
@@ -88,7 +91,7 @@ type OverlayVisibilityPayload =
       screen_bottom_y: number | null;
     }
   | { state: 'hide-request' };
-type OverlayState = 'visible' | 'hidden' | 'hiding';
+type OverlayState = 'visible' | 'hidden' | 'hiding' | 'minibar';
 
 /**
  * Main application orchestrator for Thuki.
@@ -231,6 +234,8 @@ function App() {
     active: string;
     all: string[];
   } | null>(null);
+
+  const agentMode = useAgentMode(modelConfig);
 
   /**
    * True when the window is near the screen bottom and should grow upward.
@@ -1013,6 +1018,16 @@ function App() {
       return;
     }
 
+    if (found.has('/do')) {
+      const task = strippedMessage || selectedContext?.trim() || '';
+      if (!task) return;
+      setQuery('');
+      setSelectedContext(null);
+      setAttachedImages([]);
+      void agentMode.start(task);
+      return;
+    }
+
     if (utilityTrigger) {
       // Sanitize selectedContext before passing to buildPrompt so that control
       // characters from a hostile host-app selection cannot reach the model prompt.
@@ -1240,6 +1255,7 @@ function App() {
   useEffect(() => {
     let unlistenVisibility: (() => void) | undefined;
     let unlistenOnboarding: (() => void) | undefined;
+    let unlistenMinibar: (() => void) | undefined;
 
     const attachListeners = async () => {
       unlistenVisibility = await listen<OverlayVisibilityPayload>(
@@ -1263,6 +1279,9 @@ function App() {
           setOnboardingStage(payload.stage);
         },
       );
+      unlistenMinibar = await listen('thuki://minibar', () => {
+        setOverlayState('minibar');
+      });
       // Both listeners registered — safe to let Rust decide what to show on launch.
       await invoke('notify_frontend_ready');
     };
@@ -1271,6 +1290,7 @@ function App() {
     return () => {
       unlistenVisibility?.();
       unlistenOnboarding?.();
+      unlistenMinibar?.();
     };
   }, [replayEntranceAnimation, requestHideOverlay]);
 
@@ -1543,6 +1563,15 @@ function App() {
                   </div>
                 )}
 
+                {/* Agent mode indicator — shown when agent is active */}
+                <AgentIndicator
+                  isActive={agentMode.isActive}
+                  status={agentMode.status}
+                  lastAction={agentMode.lastAction}
+                  reasoning={agentMode.reasoning}
+                  onStop={agentMode.stop}
+                />
+
                 {/* Input Bar — always pinned to the bottom */}
                 <AskBarView
                   query={query}
@@ -1600,6 +1629,16 @@ function App() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {overlayState === 'minibar' && (
+        <MinibarView
+          status={agentMode.isActive ? agentMode.status : null}
+          lastMessage={agentMode.reasoning}
+          onClick={() => {
+            setOverlayState('visible');
+            void invoke('exit_minibar_command');
+          }}
+        />
+      )}
       <ImagePreviewModal
         imageUrl={previewImageUrl}
         onClose={() => setPreviewImageUrl(null)}

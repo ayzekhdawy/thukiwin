@@ -489,6 +489,45 @@ pub async fn capture_screenshot_command(
     Ok(Some(result))
 }
 
+// ─── Silent capture (for agent loop) ─────────────────────────────────────────
+
+/// Captures the full virtual screen without hiding or showing the overlay.
+/// Used by the agent mode loop where the overlay must remain visible.
+#[cfg(target_os = "windows")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub async fn capture_silent_screenshot_command(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let base_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to resolve app data dir: {e}"))?;
+
+    tokio::task::spawn_blocking(move || {
+        let (_vx, _vy, width, height, rgba_bytes) = capture_virtual_screen_pixels()?;
+
+        let buf =
+            image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(width, height, rgba_bytes)
+                .ok_or_else(|| "Failed to create image buffer from captured pixels.".to_string())?;
+        let dynamic = image::DynamicImage::ImageRgba8(buf);
+
+        let mut png: Vec<u8> = Vec::new();
+        dynamic
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .map_err(|e| format!("Failed to encode screen capture as PNG: {e}"))?;
+
+        crate::images::save_image(&base_dir, &png)
+    })
+    .await
+    .map_err(|e| format!("image encoding task failed: {e}"))?
+}
+
+/// Tauri command: silent screenshot for agent mode (no overlay hide/show).
+#[cfg(target_os = "windows")]
+#[tauri::command]
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub async fn capture_silent_screenshot(app_handle: tauri::AppHandle) -> Result<String, String> {
+    capture_silent_screenshot_command(app_handle).await
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

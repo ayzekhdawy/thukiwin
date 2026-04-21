@@ -27,6 +27,12 @@ pub mod tts;
 mod activator;
 #[cfg(target_os = "windows")]
 mod windows_activator;
+#[cfg(target_os = "windows")]
+mod computer_control;
+#[cfg(target_os = "windows")]
+mod agent;
+#[cfg(target_os = "windows")]
+mod windows_focus;
 
 pub mod context;
 pub mod permissions;
@@ -37,6 +43,7 @@ mod windows_permissions;
 mod windows_screenshot;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -941,6 +948,10 @@ pub fn run() {
             // ── TTS state ────────────────────────────────────────────────
             app.manage(tts::TtsState::new());
 
+            // ── Agent state (Windows only) ────────────────────────────
+            #[cfg(target_os = "windows")]
+            app.manage(Arc::new(agent::AgentState::new()));
+
             // ── SQLite database for conversation history ──────────
             let app_data_dir = app
                 .path()
@@ -1028,6 +1039,24 @@ pub fn run() {
             tts::tts_stop,
             #[cfg(not(coverage))]
             tts::tts_list_voices,
+            // Agent commands (Windows only)
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::start_agent_mode,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::stop_agent_mode,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::get_agent_status,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            computer_control::execute_action_command,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            windows_screenshot::capture_silent_screenshot,
+            // Minibar commands (Windows only)
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            windows_focus::enter_minibar_command,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            windows_focus::exit_minibar_command,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            windows_focus::is_minibar_active_command,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
