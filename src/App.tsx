@@ -1280,7 +1280,13 @@ function App() {
         },
       );
       unlistenMinibar = await listen('thuki://minibar', () => {
-        setOverlayState('minibar');
+        setOverlayState((prev) => {
+          if (prev === 'visible' || prev === 'hiding') {
+            void invoke('enter_minibar_size');
+            return 'minibar';
+          }
+          return prev;
+        });
       });
       // Both listeners registered — safe to let Rust decide what to show on launch.
       await invoke('notify_frontend_ready');
@@ -1305,8 +1311,11 @@ function App() {
   }, [requestHideOverlay]);
 
   const handleMinimize = useCallback(() => {
-    void getCurrentWindow().minimize();
-  }, []);
+    // With skipTaskbar=true, minimize() hides the window with no way to
+    // restore from the taskbar. Use the normal hide flow instead so
+    // double-tap Ctrl brings it back with state preserved.
+    handleCloseOverlay();
+  }, [handleCloseOverlay]);
 
   /** Copy the last assistant response to the clipboard. */
   const handleCopyLastResponse = useCallback(() => {
@@ -1634,8 +1643,8 @@ function App() {
           status={agentMode.isActive ? agentMode.status : null}
           lastMessage={agentMode.reasoning}
           onClick={() => {
+            void invoke('exit_minibar_size');
             setOverlayState('visible');
-            void invoke('exit_minibar_command');
           }}
         />
       )}

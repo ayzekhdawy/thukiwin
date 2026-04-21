@@ -3,11 +3,10 @@
 //! Uses `SetWinEventHook` with `EVENT_SYSTEM_FOREGROUND` to detect
 //! when the user switches away from ThukiWin, triggering minibar mode.
 
-#![allow(dead_code)]
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::EVENT_SYSTEM_FOREGROUND;
 
@@ -34,19 +33,29 @@ pub fn exit_minibar() -> bool {
     false
 }
 
-/// Focus change callback type.
-type FocusChangeCallback = Arc<dyn Fn() + Send + Sync>;
+/// Focus change callback type. Receives the HWND of the newly focused window.
+type FocusChangeCallback = Arc<dyn Fn(HWND) + Send + Sync>;
 
 /// Global state for the focus change hook.
 static mut FOCUS_CALLBACK: Option<FocusChangeCallback> = None;
 static mut FOCUS_HOOK: Option<HWINEVENTHOOK> = None;
+
+/// HWND of the main ThukiWin window, used to filter self-focus events.
+static mut MAIN_HWND: Option<HWND> = None;
+
+/// Stores the main window HWND so the callback can filter self-focus events.
+pub fn set_main_hwnd(hwnd: HWND) {
+    unsafe {
+        MAIN_HWND = Some(hwnd);
+    }
+}
 
 /// The WinEvent hook callback.
 #[allow(static_mut_refs)]
 unsafe extern "system" fn focus_event_callback(
     _hook: HWINEVENTHOOK,
     _event: u32,
-    _hwnd: windows::Win32::Foundation::HWND,
+    hwnd: HWND,
     id_object: i32,
     _id_child: i32,
     _event_thread: u32,
@@ -57,13 +66,20 @@ unsafe extern "system" fn focus_event_callback(
         return;
     }
 
+    // Skip if the focused window IS ThukiWin (user clicked back on us).
+    if let Some(main_hwnd) = MAIN_HWND {
+        if hwnd == main_hwnd {
+            return;
+        }
+    }
+
     if let Some(callback) = FOCUS_CALLBACK.as_ref() {
-        callback();
+        callback(hwnd);
     }
 }
 
 /// Starts listening for window focus changes.
-/// When a different window gets focus, the callback is invoked.
+/// When a different window gets focus, the callback is invoked with that window's HWND.
 #[allow(static_mut_refs)]
 pub fn start_focus_listener(callback: FocusChangeCallback) -> Result<(), String> {
     unsafe {
@@ -155,5 +171,18 @@ mod tests {
         assert!(is_minibar_active());
         exit_minibar();
         assert!(!is_minibar_active());
+    }
+
+    #[test]
+    fn set_main_hwnd_stores_value() {
+        let test_hwnd = HWND(std::ptr::null_mut());
+        set_main_hwnd(test_hwnd);
+        unsafe {
+            assert!(MAIN_HWND.is_some());
+        }
+        // Reset
+        unsafe {
+            MAIN_HWND = None;
+        }
     }
 }

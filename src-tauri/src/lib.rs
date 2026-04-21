@@ -85,6 +85,13 @@ const OVERLAY_LOGICAL_WIDTH: f64 = 600.0;
 /// the ResizeObserver expands it after mount.
 const OVERLAY_LOGICAL_HEIGHT_COLLAPSED: f64 = 80.0;
 
+/// Minibar dimensions — thin always-on-top strip shown when the user
+/// switches away from ThukiWin while a task is in progress.
+#[cfg(target_os = "windows")]
+const OVERLAY_LOGICAL_WIDTH_MINIBAR: f64 = 420.0;
+#[cfg(target_os = "windows")]
+const OVERLAY_LOGICAL_HEIGHT_MINIBAR: f64 = 48.0;
+
 /// Frontend event used to synchronize show/hide animations with native window visibility.
 const OVERLAY_VISIBILITY_EVENT: &str = "thuki://visibility";
 const OVERLAY_VISIBILITY_SHOW: &str = "show";
@@ -93,6 +100,11 @@ const OVERLAY_VISIBILITY_HIDE_REQUEST: &str = "hide-request";
 /// Frontend event that triggers the onboarding screen when one or more
 /// required permissions have not yet been granted.
 const ONBOARDING_EVENT: &str = "thuki://onboarding";
+
+/// Frontend event emitted when the user switches away from ThukiWin,
+/// triggering minibar mode (thin always-on-top strip).
+#[cfg(target_os = "windows")]
+const MINIBAR_EVENT: &str = "thuki://minibar";
 
 /// Logical dimensions of the onboarding window (centered, fixed size).
 /// Content fits tightly; native macOS shadow is re-enabled for onboarding
@@ -305,6 +317,9 @@ fn show_overlay(app_handle: &tauri::AppHandle, ctx: crate::context::ActivationCo
 /// window hide is deferred until the frontend exit animation completes.
 fn request_overlay_hide(app_handle: &tauri::AppHandle) {
     if OVERLAY_INTENDED_VISIBLE.swap(false, Ordering::SeqCst) {
+        #[cfg(target_os = "windows")]
+        let _ = windows_focus::stop_focus_listener();
+
         emit_overlay_visibility(
             app_handle,
             OVERLAY_VISIBILITY_HIDE_REQUEST,
@@ -409,6 +424,19 @@ fn show_overlay(app_handle: &tauri::AppHandle, ctx: crate::context::ActivationCo
         let _ = window.set_skip_taskbar(true);
         let _ = window.show();
         let _ = window.set_focus();
+
+        // Store the main window HWND for the focus listener and start listening.
+        if let Ok(hwnd) = window.hwnd() {
+            windows_focus::set_main_hwnd(hwnd);
+            let _ = windows_focus::stop_focus_listener();
+            let handle = app_handle.clone();
+            let _ = windows_focus::start_focus_listener(Arc::new(move |_hwnd| {
+                if !windows_focus::is_minibar_active() {
+                    windows_focus::enter_minibar();
+                    let _ = handle.emit(MINIBAR_EVENT, ());
+                }
+            }));
+        }
     }
     emit_overlay_visibility(
         app_handle,
@@ -445,7 +473,43 @@ fn show_overlay(app_handle: &tauri::AppHandle, ctx: crate::context::ActivationCo
 ///
 /// Uses an atomic flag as the single source of truth for intended visibility,
 /// which avoids race conditions with the native panel state during animations.
+///
+/// On Windows, if the overlay is in minibar mode, double-tap Ctrl restores
+/// the full overlay instead of hiding it.
 fn toggle_overlay(app_handle: &tauri::AppHandle, ctx: crate::context::ActivationContext) {
+    #[cfg(target_os = "windows")]
+    if windows_focus::is_minibar_active() {
+        // Restore from minibar — the window is already visible, just small.
+        windows_focus::exit_minibar();
+        let handle = app_handle.clone();
+        let _ = app_handle.run_on_main_thread(move || {
+            if let Some(window) = handle.get_webview_window("main") {
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                    OVERLAY_LOGICAL_WIDTH,
+                    OVERLAY_LOGICAL_HEIGHT_COLLAPSED,
+                )));
+                let _ = window.set_focus();
+                let _ = windows_focus::stop_focus_listener();
+                let h = handle.clone();
+                let _ = windows_focus::start_focus_listener(Arc::new(move |_hwnd| {
+                    if !windows_focus::is_minibar_active() {
+                        windows_focus::enter_minibar();
+                        let _ = h.emit(MINIBAR_EVENT, ());
+                    }
+                }));
+            }
+            emit_overlay_visibility(
+                &handle,
+                OVERLAY_VISIBILITY_SHOW,
+                None,
+                None,
+                None,
+                None,
+            );
+        });
+        return;
+    }
+
     if OVERLAY_INTENDED_VISIBLE.load(Ordering::SeqCst) {
         request_overlay_hide(app_handle);
     } else {
@@ -489,6 +553,50 @@ fn set_window_frame(app_handle: tauri::AppHandle, x: f64, y: f64, width: f64, he
 #[tauri::command]
 fn notify_overlay_hidden() {
     OVERLAY_INTENDED_VISIBLE.store(false, Ordering::SeqCst);
+}
+
+/// Resizes the window to minibar dimensions and enters minibar mode.
+/// Called from the frontend when it transitions to minibar state.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn enter_minibar_size(app_handle: tauri::AppHandle) {
+    windows_focus::enter_minibar();
+    let handle = app_handle.clone();
+    let _ = app_handle.run_on_main_thread(move || {
+        if let Some(window) = handle.get_webview_window("main") {
+            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                OVERLAY_LOGICAL_WIDTH_MINIBAR,
+                OVERLAY_LOGICAL_HEIGHT_MINIBAR,
+            )));
+        }
+    });
+}
+
+/// Resizes the window back to full overlay dimensions and exits minibar mode.
+/// Called from the frontend when the user clicks the minibar to restore.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn exit_minibar_size(app_handle: tauri::AppHandle) {
+    windows_focus::exit_minibar();
+    let handle = app_handle.clone();
+    let _ = app_handle.run_on_main_thread(move || {
+        if let Some(window) = handle.get_webview_window("main") {
+            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                OVERLAY_LOGICAL_WIDTH,
+                OVERLAY_LOGICAL_HEIGHT_COLLAPSED,
+            )));
+            let _ = window.set_focus();
+            // Restart the focus listener so minibar triggers on next focus loss.
+            let _ = windows_focus::stop_focus_listener();
+            let h = handle.clone();
+            let _ = windows_focus::start_focus_listener(Arc::new(move |_hwnd| {
+                if !windows_focus::is_minibar_active() {
+                    windows_focus::enter_minibar();
+                    let _ = h.emit(MINIBAR_EVENT, ());
+                }
+            }));
+        }
+    });
 }
 
 /// Called by the frontend once its visibility event listener is registered.
@@ -1057,6 +1165,10 @@ pub fn run() {
             windows_focus::exit_minibar_command,
             #[cfg(all(target_os = "windows", not(coverage)))]
             windows_focus::is_minibar_active_command,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            enter_minibar_size,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            exit_minibar_size,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -4036,7 +4036,7 @@ describe('App', () => {
   });
 
   describe('Minimize', () => {
-    it('calls getCurrentWindow().minimize() on minimize button click', async () => {
+    it('triggers hide overlay on minimize button click (skipTaskbar prevents minimize)', async () => {
       render(<App />);
       await act(async () => {});
 
@@ -4064,7 +4064,10 @@ describe('App', () => {
       const minimizeBtn = screen.getByRole('button', { name: 'Minimize' });
       fireEvent.click(minimizeBtn);
 
-      expect(__mockWindow.minimize).toHaveBeenCalledTimes(1);
+      // Minimize now hides the overlay instead of calling window.minimize()
+      // because skipTaskbar=true means minimize() would make the window
+      // disappear with no taskbar entry to restore from.
+      expect(invoke).toHaveBeenCalledWith('notify_overlay_hidden');
     });
   });
 
