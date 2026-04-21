@@ -195,7 +195,7 @@ export function VoiceSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full mt-1 left-0 z-50 w-64 max-h-72 overflow-hidden flex flex-col bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg shadow-lg">
+        <div className="absolute top-full mt-1 left-0 z-50 w-64 max-h-72 overflow-hidden flex flex-col bg-[#2c2c2c] border border-white/20 rounded-lg shadow-lg">
           {/* Search input */}
           <div className="p-2 border-b border-white/10">
             <div className="relative">

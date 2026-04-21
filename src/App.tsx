@@ -1487,7 +1487,7 @@ function App() {
                   transition:
                     'height 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-height 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
-                className={`morphing-container relative flex flex-col bg-surface-base backdrop-blur-2xl max-h-[600px] overflow-hidden rounded-lg ${
+                className={`morphing-container relative flex flex-col bg-surface-base max-h-[600px] overflow-hidden rounded-lg ${
                   isChatMode ? 'shadow-chat' : 'shadow-bar'
                 }`}
               >

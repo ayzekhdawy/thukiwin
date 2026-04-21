@@ -150,7 +150,7 @@ export function SpeakButton({
       </button>
       {showPrivacyTip && (
         <div className="absolute bottom-full mb-2 left-0 right-0 z-50">
-          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg px-3 py-2 text-xs text-white/90 max-w-[260px]">
+          <div className="bg-white/15 border border-white/20 rounded-lg px-3 py-2 text-xs text-white/90 max-w-[260px]">
             <p className="mb-2">
               Text will be sent to Microsoft servers for speech synthesis. This
               differs from Thuki&apos;s local-first approach.

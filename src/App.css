@@ -14,8 +14,8 @@
   --color-neutral: #1c1c1c;
 
   /* Surface tokens derived from the palette */
-  --color-surface-base: rgba(32, 32, 32, 0.98);
-  --color-surface-elevated: rgba(44, 44, 44, 0.6);
+  --color-surface-base: #202020;
+  --color-surface-elevated: #2c2c2c;
   --color-surface-border: rgba(255, 255, 255, 0.08);
 
   /* Text tokens */
@@ -23,10 +23,10 @@
   --color-text-secondary: #8a8a8e;
 
   /* Streamdown theme tokens (shadcn/ui convention) */
-  --color-muted: rgba(44, 44, 44, 0.6);
+  --color-muted: #2c2c2c;
   --color-muted-foreground: #8a8a8e;
   --color-border: rgba(255, 255, 255, 0.08);
-  --color-sidebar: rgba(32, 32, 32, 0.95);
+  --color-sidebar: #202020;
   --color-foreground: #f0f0f2;
 
   /* Elevation — input bar mode (compact floating effect, Fluent-inspired) */
@@ -73,13 +73,10 @@ body {
 }
 
 /**
- * AI bubble — frosted glass surface with a subtle border for depth.
- * Harmonizes with the warm ambient dark overlay backdrop.
+ * AI bubble — solid surface with a subtle border for depth.
  */
 .chat-bubble-ai {
-  background: rgba(44, 44, 44, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #2c2c2c;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-top-color: rgba(255, 255, 255, 0.04);
   box-shadow:
@@ -186,8 +183,8 @@ body {
  * Plain CSS outside @layer overrides Tailwind utility classes in @layer utilities.
  */
 [data-streamdown='code-block'] {
-  position: relative; /* anchors the absolutely-repositioned actions wrapper */
-  background: rgba(18, 18, 22, 0.95);
+  position: relative;
+  background: #12121a;
   border-color: rgba(255, 141, 92, 0.15);
   box-shadow:
     0 0 0 1px rgba(255, 141, 92, 0.04),
