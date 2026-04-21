@@ -52,6 +52,27 @@ THUKI_SUPPORTED_AI_MODELS=gemini-3-flash-preview,gemma4:e2b
 
 Whitespace around each entry is trimmed. Empty entries are ignored. If the variable is unset or empty, ThukiWin falls back to `gemini-3-flash-preview`.
 
+### Agent Mode Configuration
+
+Controls the behavior of the `/do` computer-control agent.
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `THUKI_AGENT_MODEL` | Ollama model used for agent mode (must be vision-capable). If unset, falls back to the first model in `THUKI_SUPPORTED_AI_MODELS`. | _(uses `THUKI_SUPPORTED_AI_MODELS`)_ |
+| `THUKI_AGENT_MAX_ITERATIONS` | Maximum number of screenshot→analyze→execute cycles before the agent stops. | `50` |
+| `THUKI_AGENT_ACTION_DELAY_MS` | Milliseconds to wait between executing each action. Gives you time to observe what the agent is doing. | `300` |
+| `THUKI_AGENT_SCREENSHOT_DELAY_MS` | Milliseconds to wait after an action before taking the next screenshot (allows UI to update). | `500` |
+
+**Example:**
+
+```bash
+# Use a specific vision model for agent mode
+THUKI_AGENT_MODEL=llama3.2-vision
+
+# Slower actions for easier observation
+THUKI_AGENT_ACTION_DELAY_MS=500
+```
+
 ### Validation Rules
 
 All configuration values are validated at startup via `src/config/index.ts`:

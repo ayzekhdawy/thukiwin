@@ -132,3 +132,36 @@ Summarizes what a piece of text is about, then extracts every task, action item,
 - `/todos [paste a conversation or notes]`: processes the typed or pasted content
 
 **Behavior:** Responds in two parts: a short paragraph explaining the context and what is at stake, followed by a `- [ ]` checkbox list of all tasks. Each to-do includes who is responsible (if mentioned) and any deadline or timeframe. Observations and background that imply no action are excluded.
+
+---
+
+## /do
+
+Enters agent mode: the AI autonomously controls your desktop to complete the described task. It takes screenshots, analyzes them with a vision model, and executes mouse/keyboard actions in a loop until the task is done.
+
+**Usage:** `/do <task description>`
+
+**Examples:**
+- `/do Open Notepad and type Hello World`: launches Notepad and types the text
+- `/do Find the Settings app and open it`: navigates the Start menu to find and open Settings
+- `/do Close the current window`: presses Alt+F4 on the active window
+- `/do Copy the selected text and paste it into a new document`: performs clipboard operations
+
+**Behavior:**
+1. A screenshot is captured (ThukiWin's own window is excluded)
+2. The screenshot and your task are sent to a vision-capable Ollama model
+3. The model returns actions (`CLICK x y`, `TYPE text`, `KEY_PRESS ctrl+c`, `LAUNCH app`, etc.)
+4. Actions are executed via Win32 `SendInput` with a 300 ms delay between each
+5. A new screenshot is taken and the loop repeats until the model outputs `DONE` or you stop it
+
+**Safety:**
+- Maximum 50 iterations per task (prevents infinite loops)
+- 300 ms delay between actions so you can follow along
+- Click the **Stop** button to cancel at any time
+- A status indicator (amber banner with pulsing dot) shows the current phase: Capturing, Analyzing, or Executing
+
+**Minibar integration:** When you switch away from ThukiWin while an agent task is running, the overlay shrinks to a minibar. The minibar shows a status dot (amber = running) and the last action. Click it to restore the full overlay and monitor progress.
+
+**Vision model requirement:** Agent mode requires a vision-capable model such as `llama3.2-vision`. If you only have a text model installed, `/do` will fail with an error. Pull a vision model with `ollama pull llama3.2-vision`.
+
+**Not composable:** `/do` does not combine with other commands. It is a standalone mode that takes over the input.

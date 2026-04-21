@@ -44,9 +44,9 @@ Fork of [Thuki](https://github.com/quiet-node/thuki) (macOS) — ported to Windo
 
 ## How It Works
 
-Double-tap <kbd>Ctrl</kbd> to summon ThukiWin from anywhere. Ask a question, get an answer, and dismiss. Use `/screen` or the screenshot button to capture your screen and attach it as context.
+Double-tap <kbd>Ctrl</kbd> to summon ThukiWin from anywhere. Ask a question, get an answer, and dismiss. Use `/screen` or the screenshot button to capture your screen and attach it as context. Type `/do` followed by a task to let the AI take over your desktop and complete it autonomously.
 
-ThukiWin floats above every app. Highlight text anywhere, double-tap <kbd>Ctrl</kbd>, and ThukiWin opens with your selection pre-filled as a quote, ready to ask about.
+ThukiWin floats above every app. Highlight text anywhere, double-tap <kbd>Ctrl</kbd>, and ThukiWin opens with your selection pre-filled as a quote, ready to ask about. When you switch windows, ThukiWin shrinks to a slim minibar so you never lose track of the AI.
 
 ## Why ThukiWin?
 
@@ -62,14 +62,19 @@ Most AI tools require accounts, API keys, or subscriptions that bill you per tok
 
 - **Always available:** double-tap <kbd>Ctrl</kbd> to summon the overlay from any app, including fullscreen apps
 - **Context-aware quotes:** highlight any text, then double-tap <kbd>Ctrl</kbd> to open ThukiWin with the selected text pre-filled as a quote
+- **Computer control (agent mode):** type `/do` to let the AI autonomously control your desktop — click, type, launch apps, and more
+- **Minibar mode:** overlay shrinks to a thin always-on-top strip when you switch windows, so you never lose track of the AI
 - **Throwaway conversations:** fast, lightweight interactions without the overhead of a full chat app
 - **Conversation history:** persist and revisit past conversations across sessions
 - **Fully local LLM:** powered by Ollama; no API keys, no accounts, no cost per query
 - **Image input:** paste or drag images and screenshots directly into the chat
 - **Screen capture:** type `/screen` to instantly capture your entire screen and attach it to your question as context
-- **Slash commands:** built-in prompt shortcuts for common tasks: `/translate`, `/rewrite`, `/tldr`, `/refine`, `/bullets`, `/todos`. Highlight text anywhere, summon ThukiWin, type a command, and hit Enter
+- **Slash commands:** built-in prompt shortcuts for common tasks: `/do`, `/screen`, `/think`, `/translate`, `/rewrite`, `/tldr`, `/refine`, `/bullets`, `/todos`. Highlight text anywhere, summon ThukiWin, type a command, and hit Enter
 - **Extended reasoning:** type `/think` to have the model reason through a problem step by step before answering
 - **Read Aloud (TTS):** click the speaker button on any message to have it read aloud using Microsoft Edge TTS voices (Windows-only; not available in the macOS version of Thuki)
+- **Desktop notifications:** get notified when the AI finishes a response while you're in another window
+- **Multi-monitor support:** screenshots and overlay positioning work across all monitors
+- **Interactive region capture:** drag to select a specific area of your screen instead of capturing everything
 - **Privacy-first:** zero-trust architecture, all data stays on your device
 
 ## Requirements
@@ -81,6 +86,7 @@ Most AI tools require accounts, API keys, or subscriptions that bill you per tok
 | **GPU** | Not required | CPU inference works; GPU speeds up larger models |
 | **Disk** | 2 GB (app) + model size | Models are typically 2-8 GB each |
 | **Ollama** | Latest | Must be running at `http://127.0.0.1:11434` |
+| **Vision model** | For agent mode | Pull a vision-capable model (e.g. `llama3.2-vision`) to use `/do` |
 
 ### Build Requirements (for building from source)
 
@@ -106,7 +112,11 @@ Most AI tools require accounts, API keys, or subscriptions that bill you per tok
 2. **Pull a model**
 
    ```powershell
+   # Chat model (required)
    ollama pull gemini-3-flash-preview
+
+   # Vision model for agent mode (optional, needed for /do)
+   ollama pull llama3.2-vision
    ```
 
    > **Note:** Model files are large (typically 2-8 GB). This step can take several minutes depending on your internet connection. You only need to do it once.
@@ -183,6 +193,57 @@ ThukiWin includes a built-in text-to-speech feature using Microsoft Edge TTS voi
 
 > **Privacy note:** The TTS feature sends the text of the selected message to Microsoft's Edge TTS service over the internet. A one-time disclosure is shown on first use. This feature is Windows-only and is not available in the macOS version of Thuki.
 
+### Computer Control (Agent Mode)
+
+ThukiWin's `/do` command lets the AI autonomously control your desktop — clicking, typing, launching apps, and more. The agent loop works as follows:
+
+1. **Capture** — a screenshot of your screen is taken (excluding ThukiWin's own window)
+2. **Analyze** — the screenshot is sent to a vision-capable Ollama model along with your task description
+3. **Execute** — the model returns actions (click, type, key press, scroll, launch) which are carried out via Win32 `SendInput`
+4. **Repeat** — the loop captures a new screenshot, re-evaluates, and continues until the task is done or you stop it
+
+**Supported actions:**
+
+| Action | Syntax | Example |
+|--------|--------|---------|
+| Left click | `CLICK x y` | `CLICK 500 300` |
+| Double click | `DOUBLE_CLICK x y` | `DOUBLE_CLICK 500 300` |
+| Right click | `RIGHT_CLICK x y` | `RIGHT_CLICK 500 300` |
+| Drag | `DRAG x1 y1 x2 y2` | `DRAG 100 200 400 200` |
+| Type text | `TYPE text` | `TYPE hello world` |
+| Key combo | `KEY_PRESS modifier+key` | `KEY_PRESS ctrl+c` |
+| Scroll | `SCROLL direction amount` | `SCROLL down 3` |
+| Open app | `LAUNCH app` | `LAUNCH notepad` |
+| Done | `DONE` | `DONE` |
+
+**Usage examples:**
+
+```
+/do Open Notepad and type Hello World
+/do Find the Settings app and open it
+/do Close the current window
+/do Copy the selected text and paste it into a new document
+```
+
+**Safety:**
+- A maximum of 50 iterations prevents infinite loops
+- 300 ms delay between actions lets you observe what's happening
+- Click the **Stop** button (or type anything) to cancel at any time
+- The agent uses a vision model to see your screen before each action — it adapts to what it finds, not a fixed script
+
+**Vision model requirement:** Agent mode requires a vision-capable model (e.g. `llama3.2-vision`). The default chat model (`gemini-3-flash-preview`) handles text conversations. Set the vision model in your environment or let ThukiWin auto-detect it.
+
+### Minibar Mode
+
+When you switch away from ThukiWin while it's generating a response or running an agent task, the overlay automatically shrinks to a **minibar** — a thin 40 px always-on-top strip that stays visible above all windows.
+
+The minibar shows:
+- A **status dot** — green (idle/done), amber (thinking/executing), red (error)
+- A **preview** of the last message or current action
+- **Click** anywhere on the minibar to restore the full overlay
+
+When the AI finishes a response while you're in another window, a desktop notification is sent so you don't miss it.
+
 ## Architecture & Security
 
 <details>
@@ -193,7 +254,7 @@ ThukiWin is a **Tauri v2** app (Rust backend + React/TypeScript frontend) that i
 ### Stack
 
 - **Frontend:** React 19 + TypeScript + Tailwind CSS 4 + Vite
-- **Backend:** Rust with Tauri v2 + Win32 API (windows crate v0.58)
+- **Backend:** Rust with Tauri v2 + Win32 API (windows crate v0.61)
 - **Database:** SQLite (bundled, local only)
 - **AI Engine:** Ollama (local, no cloud)
 
@@ -205,6 +266,8 @@ ThukiWin is a **Tauri v2** app (Rust backend + React/TypeScript frontend) that i
 
 3. **Local storage only:** All conversations are stored in a local SQLite database in the app data directory.
 
+4. **Agent mode input simulation:** When `/do` is invoked, ThukiWin uses Win32 `SendInput` to simulate mouse and keyboard events. Actions are parsed from the model's text output and executed locally. The agent loop captures screenshots via GDI `BitBlt` and sends them as base64-encoded images to the vision model. No remote control or screen-sharing service is involved.
+
 ### Window Lifecycle
 
 The app starts hidden. The hotkey or tray menu shows it. The window close button hides (not quits); quit is only available from the tray.
@@ -213,7 +276,7 @@ The app starts hidden. The hotkey or tray menu shows it. The window close button
 
 ## Configuration
 
-See [docs/configurations.md](docs/configurations.md) for the full configuration reference (model selection, quote display limits, and system prompt).
+See [docs/configurations.md](docs/configurations.md) for the full configuration reference (model selection, agent mode, quote display limits, and system prompt).
 
 See [docs/commands.md](docs/commands.md) for the full slash command reference.
 
