@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0](https://github.com/ayzekhdawy/thukiwin/compare/v0.8.0...v0.9.0) (2026-04-22)
+
+### Features
+
+* **cloud API computer control**: add OpenAI (GPT-4o) and Anthropic (Claude) providers with native tool-calling for reliable desktop automation
+* **provider abstraction**: streaming SSE support for OpenAI `/v1/chat/completions` and Anthropic `/v1/messages` with automatic tool call → action conversion
+* **settings panel**: in-app UI for switching between Ollama/OpenAI/Anthropic providers, API key configuration, model selection, and base URL
+* **intent detection**: Turkish and English phrase recognition to auto-route "ekrandaki ne görüyorsun" → vision and "open notepad" → agent mode
+* **learning confirmation**: first 3 agent actions per session require user approval, then auto-execute; dangerous actions always require confirmation
+* **local gateway**: OpenAI-compatible HTTP server on port 18789 for third-party integration
+* **auto-start on boot**: Windows Task Scheduler integration via `schtasks`
+
+### Bug Fixes
+
+* fix settings panel triggering minibar activation on window focus loss
+* fix ResizeObserver resize events while settings modal is open
+* fix minibar drag instability from pointer event listener cleanup issues
+* fix Escape/close overlay handler interfering with open settings panel
+* fix OpenAI tool call streaming type conversion for `ProviderChunk::ToolCalls`
+* fix Anthropic request JSON construction (removed unsupported `json!` spread)
+* remove all blur/frosted glass effects for solid, stable backgrounds
+
 ## [0.8.0](https://github.com/ayzekhdawy/thukiwin/compare/v0.7.0...v0.8.0) (2026-04-17)
 
 

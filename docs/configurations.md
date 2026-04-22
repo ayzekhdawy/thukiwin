@@ -59,9 +59,22 @@ Controls the behavior of the `/do` computer-control agent.
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `THUKI_AGENT_MODEL` | Ollama model used for agent mode (must be vision-capable). If unset, falls back to the first model in `THUKI_SUPPORTED_AI_MODELS`. | _(uses `THUKI_SUPPORTED_AI_MODELS`)_ |
-| `THUKI_AGENT_MAX_ITERATIONS` | Maximum number of screenshot→analyze→execute cycles before the agent stops. | `50` |
-| `THUKI_AGENT_ACTION_DELAY_MS` | Milliseconds to wait between executing each action. Gives you time to observe what the agent is doing. | `300` |
+| `THUKI_AGENT_MAX_ITERATIONS` | Maximum number of screenshot→analyze→execute cycles before the agent stops. | `30` |
+| `THUKI_AGENT_ACTION_DELAY_MS` | Milliseconds to wait between executing each action. Gives you time to observe what the agent is doing. | `500` |
 | `THUKI_AGENT_SCREENSHOT_DELAY_MS` | Milliseconds to wait after an action before taking the next screenshot (allows UI to update). | `500` |
+
+**Cloud Provider Configuration:**
+
+In addition to local Ollama models, ThukiWin supports OpenAI and Anthropic cloud APIs for reliable tool-calling computer control. Configure via the Settings panel in the app:
+
+| Setting | Description |
+| :--- | :--- |
+| **Provider** | `ollama` (local), `openai`, or `anthropic` |
+| **Model** | Provider-specific model (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
+| **API Key** | Your OpenAI or Anthropic API key (stored locally in SQLite) |
+| **Base URL** | API endpoint (defaults to `https://api.openai.com/v1` or `https://api.anthropic.com`) |
+
+Cloud providers use native tool-calling APIs for deterministic, structured actions instead of text parsing.
 
 **Example:**
 

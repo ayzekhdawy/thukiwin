@@ -112,7 +112,7 @@ export function Tooltip({ label, children }: TooltipProps) {
                     }}
                     className="absolute -top-1.5 h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-surface-border bg-surface-base"
                   />
-                  <div className="relative rounded-lg border border-surface-border bg-surface-base px-2.5 py-1.5 text-[11px] text-text-primary shadow-chat whitespace-nowrap">
+                  <div className="relative rounded-lg border border-surface-border bg-surface-base px-2.5 py-1.5 text-[11px] text-text-primary whitespace-nowrap">
                     {label}
                   </div>
                 </motion.div>

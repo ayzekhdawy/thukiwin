@@ -36,9 +36,9 @@
   <a href="https://github.com/ayzekhdawy/thukiwin/releases/download/untagged-fb9e77c48260eb00efb2/ThukiWin-demo.mp4">Watch the full demo video</a>
 </p>
 
-**No API keys. No subscriptions. No cloud. No telemetry. Free forever.**
+**No subscriptions. No cloud required. No telemetry. Free forever.**
 
-ThukiWin is a lightweight Windows overlay powered by local AI models running entirely on your own machine, built for quick, uninterrupted asks without ever leaving what you're doing.
+ThukiWin is a lightweight Windows overlay powered by AI — fully local via Ollama, or connect to OpenAI/Anthropic for advanced computer control. Built for quick, uninterrupted asks without ever leaving what you're doing.
 
 Fork of [Thuki](https://github.com/quiet-node/thuki) (macOS) — ported to Windows with native Win32 APIs.
 
@@ -52,9 +52,9 @@ ThukiWin floats above every app. Highlight text anywhere, double-tap <kbd>Ctrl</
 
 Most AI tools require accounts, API keys, or subscriptions that bill you per token. ThukiWin is different:
 
-- **100% free AI interactions:** you run the model locally, there is no per-query cost, ever
-- **Zero trust by design:** no remote server, no cloud backend, no analytics, no telemetry
-- **Works completely offline:** once your model is pulled, ThukiWin runs without an internet connection
+- **100% free local AI:** run models locally via Ollama, no per-query cost, ever
+- **Cloud API support:** optionally connect to OpenAI (GPT-4o) or Anthropic (Claude) for advanced computer control with native tool calling
+- **Zero trust by design:** no analytics, no telemetry — cloud API keys are stored locally only
 - **Your data is yours:** conversations are stored in a local SQLite database on your machine and nowhere else
 - **Works everywhere on Windows:** double-tap <kbd>Ctrl</kbd> and ThukiWin appears on your desktop, inside a browser, inside a terminal, and in fullscreen apps
 
@@ -62,7 +62,11 @@ Most AI tools require accounts, API keys, or subscriptions that bill you per tok
 
 - **Always available:** double-tap <kbd>Ctrl</kbd> to summon the overlay from any app, including fullscreen apps
 - **Context-aware quotes:** highlight any text, then double-tap <kbd>Ctrl</kbd> to open ThukiWin with the selected text pre-filled as a quote
-- **Computer control (agent mode):** type `/do` to let the AI autonomously control your desktop — click, type, launch apps, and more
+- **Computer control (agent mode):** type `/do` or ask naturally (e.g. "open notepad") to let the AI autonomously control your desktop — click, type, launch apps, and more
+- **Cloud API computer control:** connect OpenAI or Anthropic for reliable tool-calling computer use — the model returns structured actions instead of text parsing
+- **Smart intent detection:** Turkish and English phrases like "ekrandaki ne görüyorsun" or "open notepad" automatically trigger vision analysis or agent mode
+- **Settings panel:** switch between Ollama/OpenAI/Anthropic providers, configure API keys, model selection, and gateway — all from the UI
+- **Learning confirmation:** first 3 agent actions require your approval, then auto-execute; dangerous actions always need confirmation
 - **Minibar mode:** overlay shrinks to a thin always-on-top strip when you switch windows, so you never lose track of the AI
 - **Throwaway conversations:** fast, lightweight interactions without the overhead of a full chat app
 - **Conversation history:** persist and revisit past conversations across sessions
@@ -86,7 +90,8 @@ Most AI tools require accounts, API keys, or subscriptions that bill you per tok
 | **GPU** | Not required | CPU inference works; GPU speeds up larger models |
 | **Disk** | 2 GB (app) + model size | Models are typically 2-8 GB each |
 | **Ollama** | Latest | Must be running at `http://127.0.0.1:11434` |
-| **Vision model** | For agent mode | Pull a vision-capable model (e.g. `llama3.2-vision`) to use `/do` |
+| **Vision model** | For local agent mode | Pull a vision-capable model (e.g. `llama3.2-vision`) to use `/do` |
+| **API key** | For cloud agent mode | OpenAI or Anthropic API key needed for tool-calling computer control |
 
 ### Build Requirements (for building from source)
 
@@ -195,12 +200,21 @@ ThukiWin includes a built-in text-to-speech feature using Microsoft Edge TTS voi
 
 ### Computer Control (Agent Mode)
 
-ThukiWin's `/do` command lets the AI autonomously control your desktop — clicking, typing, launching apps, and more. The agent loop works as follows:
+ThukiWin's `/do` command (or natural language like "open notepad") lets the AI autonomously control your desktop. The agent loop works as follows:
 
 1. **Capture** — a screenshot of your screen is taken (excluding ThukiWin's own window)
-2. **Analyze** — the screenshot is sent to a vision-capable Ollama model along with your task description
+2. **Analyze** — the screenshot is sent to the AI model along with your task description
 3. **Execute** — the model returns actions (click, type, key press, scroll, launch) which are carried out via Win32 `SendInput`
 4. **Repeat** — the loop captures a new screenshot, re-evaluates, and continues until the task is done or you stop it
+
+**Two execution modes:**
+
+| Mode | Provider | How it works |
+|------|----------|-------------|
+| **Local (text-parsing)** | Ollama | The model returns free-text actions like `CLICK 500 300` which are parsed and executed |
+| **Cloud (tool-calling)** | OpenAI / Anthropic | The model returns structured JSON tool calls (e.g. `computer_click(x, y)`) which map directly to actions — more reliable for complex tasks |
+
+**Local mode** works with any Ollama vision model but can be unreliable for structured output. **Cloud mode** uses native tool-calling APIs for deterministic, reliable computer control.
 
 **Supported actions:**
 
@@ -226,9 +240,10 @@ ThukiWin's `/do` command lets the AI autonomously control your desktop — click
 ```
 
 **Safety:**
-- A maximum of 50 iterations prevents infinite loops
-- 300 ms delay between actions lets you observe what's happening
-- Click the **Stop** button (or type anything) to cancel at any time
+- A maximum of 30 iterations prevents infinite loops
+- 500 ms delay between actions lets you observe what's happening
+- Click the **Stop** button to cancel at any time
+- **Learning mode:** first 3 actions per session require your confirmation, then auto-execute; dangerous actions (opening apps) always require confirmation
 - The agent uses a vision model to see your screen before each action — it adapts to what it finds, not a fixed script
 
 **Vision model requirement:** Agent mode requires a vision-capable model (e.g. `llama3.2-vision`). The default chat model (`gemini-3-flash-preview`) handles text conversations. Set the vision model in your environment or let ThukiWin auto-detect it.
@@ -262,7 +277,7 @@ ThukiWin is a **Tauri v2** app (Rust backend + React/TypeScript frontend) that i
 
 1. **Frontend (Tauri/React):** Operates within a secure system webview (WebView2 on Windows) with restricted IPC. Streaming uses Tauri's Channel API; the Rust backend sends typed `StreamChunk` enum variants, and the frontend hook accumulates tokens into React state.
 
-2. **Minimal network egress:** ThukiWin only communicates with the local Ollama instance at `127.0.0.1:11434`. The only exception is the Read Aloud (TTS) feature, which sends the selected text to Microsoft's Edge TTS service over the internet. All other features are fully offline.
+2. **Minimal network egress:** By default, ThukiWin only communicates with the local Ollama instance at `127.0.0.1:11434`. When a cloud provider (OpenAI/Anthropic) is configured for agent mode, API calls are sent directly to the respective cloud endpoint. The only other internet traffic is the Read Aloud (TTS) feature, which sends text to Microsoft's Edge TTS service. API keys are stored locally in the SQLite database and never sent to third parties.
 
 3. **Local storage only:** All conversations are stored in a local SQLite database in the app data directory.
 
