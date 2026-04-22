@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "ThukiWin",
-        "width": 600,
-        "height": 700,
+        "width": 650,
+        "height": 60,
         "resizable": true,
         "fullscreen": false,
         "transparent": true,

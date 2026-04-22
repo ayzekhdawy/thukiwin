@@ -80,10 +80,10 @@ tauri_panel! {
 // ─── Window helpers ─────────────────────────────────────────────────────────
 
 /// Expected logical width of the overlay window for spawn-position calculations.
-const OVERLAY_LOGICAL_WIDTH: f64 = 600.0;
+const OVERLAY_LOGICAL_WIDTH: f64 = 650.0;
 /// Collapsed bar height used for Y-clamp at show time. The window starts collapsed;
 /// the ResizeObserver expands it after mount.
-const OVERLAY_LOGICAL_HEIGHT_COLLAPSED: f64 = 80.0;
+const OVERLAY_LOGICAL_HEIGHT_COLLAPSED: f64 = 60.0;
 
 /// Minibar dimensions — thin always-on-top strip shown when the user
 /// switches away from ThukiWin while a task is in progress.
@@ -1241,7 +1241,7 @@ mod tests {
 
     #[test]
     fn overlay_logical_dimensions() {
-        assert_eq!(OVERLAY_LOGICAL_WIDTH, 600.0);
-        assert_eq!(OVERLAY_LOGICAL_HEIGHT_COLLAPSED, 80.0);
+        assert_eq!(OVERLAY_LOGICAL_WIDTH, 650.0);
+        assert_eq!(OVERLAY_LOGICAL_HEIGHT_COLLAPSED, 60.0);
     }
 }
