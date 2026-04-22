@@ -14,26 +14,34 @@ vi.mock('framer-motion', () => ({
 }));
 
 describe('MinibarView', () => {
-  it('should render with default text when no lastMessage', () => {
+  it('should render the logo icon', () => {
     render(<MinibarView status={null} lastMessage={null} onClick={() => {}} />);
-    expect(screen.getByText('ThukiWin')).toBeDefined();
+    const img = screen.getByAltText('ThukiWin');
+    expect(img).toBeDefined();
   });
 
-  it('should render lastMessage when provided', () => {
-    render(<MinibarView status={null} lastMessage="I found the file" onClick={() => {}} />);
-    expect(screen.getByText('I found the file')).toBeDefined();
-  });
-
-  it('should call onClick when clicked', () => {
+  it('should call onClick on pointer down + up without movement', () => {
     const onClick = vi.fn();
-    render(<MinibarView status={null} lastMessage={null} onClick={onClick} />);
-    fireEvent.click(screen.getByText('ThukiWin'));
+    const { container } = render(<MinibarView status={null} lastMessage={null} onClick={onClick} />);
+    const el = container.firstChild as HTMLElement;
+    fireEvent.pointerDown(el, { clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(el, { clientX: 10, clientY: 10 });
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('should NOT call onClick when pointer moves beyond threshold', () => {
+    const onClick = vi.fn();
+    const { container } = render(<MinibarView status={null} lastMessage={null} onClick={onClick} />);
+    const el = container.firstChild as HTMLElement;
+    fireEvent.pointerDown(el, { clientX: 10, clientY: 10 });
+    // Simulate a move beyond the 3px threshold
+    fireEvent.pointerMove(el, { clientX: 20, clientY: 10 });
+    fireEvent.pointerUp(el, { clientX: 20, clientY: 10 });
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('should render with idle status dot', () => {
     render(<MinibarView status="idle" lastMessage={null} onClick={() => {}} />);
-    // The dot should have the emerald color class
     const dot = document.querySelector('.bg-emerald-400');
     expect(dot).not.toBeNull();
   });
@@ -47,6 +55,12 @@ describe('MinibarView', () => {
   it('should render with error status dot', () => {
     render(<MinibarView status="error" lastMessage={null} onClick={() => {}} />);
     const dot = document.querySelector('.bg-red-400');
+    expect(dot).not.toBeNull();
+  });
+
+  it('should pulse during active agent status', () => {
+    render(<MinibarView status="analyzing" lastMessage={null} onClick={() => {}} />);
+    const dot = document.querySelector('.animate-pulse');
     expect(dot).not.toBeNull();
   });
 });

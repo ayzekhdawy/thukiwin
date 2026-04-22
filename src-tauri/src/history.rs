@@ -208,6 +208,7 @@ pub async fn generate_title(
     client: State<'_, reqwest::Client>,
     system_prompt: State<'_, SystemPrompt>,
     model_config: State<'_, ModelConfig>,
+    ollama_url: State<'_, crate::commands::OllamaUrl>,
 ) -> Result<(), String> {
     // Build a condensed context for title generation.
     let mut context = String::new();
@@ -242,15 +243,17 @@ pub async fn generate_title(
         },
     ];
 
+    let url = ollama_url.0.lock().unwrap().clone();
     let endpoint = format!(
         "{}/api/chat",
-        crate::commands::DEFAULT_OLLAMA_URL.trim_end_matches('/')
+        url.trim_end_matches('/')
     );
 
+    let active_model = model_config.active.lock().unwrap().clone();
     let cancel_token = tokio_util::sync::CancellationToken::new();
     let accumulated = crate::commands::stream_ollama_chat(
         &endpoint,
-        &model_config.active,
+        &active_model,
         title_messages,
         false,
         &client,

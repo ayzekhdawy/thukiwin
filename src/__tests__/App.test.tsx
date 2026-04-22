@@ -442,7 +442,7 @@ describe('App', () => {
     function triggerResize(element: Element, contentHeight: number) {
       vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
         height: contentHeight,
-        width: 600,
+        width: 650,
         top: 0,
         left: 0,
         right: 600,
@@ -465,7 +465,7 @@ describe('App', () => {
       render(<App />);
       await act(async () => {});
 
-      // window_y=804, screen_bottom=900. bottomY = 804+80 = 884.
+      // window_y=804, screen_bottom=900. bottomY = 804+60 = 864.
       await act(async () => {
         emitTauriEvent('thuki://visibility', {
           state: 'show',
@@ -486,11 +486,11 @@ describe('App', () => {
         triggerResize(container!, 60);
       });
 
-      // bottomY(884) - targetHeight(108) = 776
+      // bottomY(864) - targetHeight(108) = 756
       expect(invoke).toHaveBeenCalledWith('set_window_frame', {
         x: 100,
-        y: 776,
-        width: 600,
+        y: 756,
+        width: 650,
         height: 108,
       });
     });
@@ -580,11 +580,11 @@ describe('App', () => {
       act(() => {
         triggerResize(container2!, 60);
       });
-      // bottomY = 804+80 = 884. 884-108 = 776.
+      // bottomY = 804+60 = 864. 864-108 = 756.
       expect(invoke).toHaveBeenCalledWith('set_window_frame', {
         x: 100,
-        y: 776,
-        width: 600,
+        y: 756,
+        width: 650,
         height: 108,
       });
     });
@@ -4065,9 +4065,9 @@ describe('App', () => {
       fireEvent.click(minimizeBtn);
 
       // Minimize now hides the overlay instead of calling window.minimize()
-      // because skipTaskbar=true means minimize() would make the window
+      // so the floating icon is always available to restore from
       // disappear with no taskbar entry to restore from.
-      expect(invoke).toHaveBeenCalledWith('notify_overlay_hidden');
+      expect(invoke).toHaveBeenCalledWith('enter_minibar_size');
     });
   });
 

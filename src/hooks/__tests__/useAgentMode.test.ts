@@ -10,7 +10,11 @@ const mockListen = listen as unknown as ReturnType<typeof vi.fn>;
 
 describe('useAgentMode', () => {
   beforeEach(() => {
-    mockInvoke.mockResolvedValue(undefined);
+    // Default: get_ollama_url succeeds, start_agent_mode succeeds, listen succeeds.
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_ollama_url') return Promise.resolve('http://127.0.0.1:11434');
+      return Promise.resolve(undefined);
+    });
     mockListen.mockResolvedValue(vi.fn());
   });
 
@@ -34,8 +38,14 @@ describe('useAgentMode', () => {
     expect(typeof result.current.stop).toBe('function');
   });
 
-  it('should set error state when invoke rejects', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('Failed'));
+  it('should set error state when start_agent_mode rejects', async () => {
+    // get_ollama_url succeeds, but start_agent_mode fails.
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_ollama_url') return Promise.resolve('http://127.0.0.1:11434');
+      if (cmd === 'start_agent_mode') return Promise.reject(new Error('Failed'));
+      return Promise.resolve(undefined);
+    });
+
     const { result } = renderHook(() => useAgentMode(null));
 
     await act(async () => {

@@ -14,6 +14,7 @@ const statusLabels: Record<AgentStatus, string> = {
   capturing: 'Capturing screen...',
   analyzing: 'Analyzing...',
   executing: 'Executing action...',
+  waiting_confirmation: 'Confirm action...',
   done: 'Done',
   error: 'Error',
 };
@@ -23,6 +24,7 @@ const statusColors: Record<AgentStatus, string> = {
   capturing: 'bg-amber-400',
   analyzing: 'bg-amber-400',
   executing: 'bg-amber-400',
+  waiting_confirmation: 'bg-yellow-400',
   done: 'bg-emerald-400',
   error: 'bg-red-400',
 };

@@ -20,6 +20,7 @@ pub mod database;
 pub mod history;
 pub mod images;
 pub mod onboarding;
+pub mod providers;
 pub mod screenshot;
 pub mod tts;
 
@@ -31,6 +32,10 @@ mod windows_activator;
 mod computer_control;
 #[cfg(target_os = "windows")]
 mod agent;
+#[cfg(target_os = "windows")]
+mod autostart;
+
+mod gateway;
 #[cfg(target_os = "windows")]
 mod windows_focus;
 
@@ -88,7 +93,7 @@ const OVERLAY_LOGICAL_HEIGHT_COLLAPSED: f64 = 60.0;
 /// Minibar dimensions — thin always-on-top strip shown when the user
 /// switches away from ThukiWin while a task is in progress.
 #[cfg(target_os = "windows")]
-const OVERLAY_LOGICAL_WIDTH_MINIBAR: f64 = 420.0;
+const OVERLAY_LOGICAL_WIDTH_MINIBAR: f64 = 48.0;
 #[cfg(target_os = "windows")]
 const OVERLAY_LOGICAL_HEIGHT_MINIBAR: f64 = 48.0;
 
@@ -1052,6 +1057,9 @@ pub fn run() {
             app.manage(commands::ConversationHistory::new());
             app.manage(commands::SystemPrompt(commands::load_system_prompt()));
             app.manage(commands::load_model_config());
+            app.manage(commands::OllamaUrl(std::sync::Mutex::new(
+                commands::DEFAULT_OLLAMA_URL.to_string(),
+            )));
 
             // ── TTS state ────────────────────────────────────────────────
             app.manage(tts::TtsState::new());
@@ -1059,6 +1067,9 @@ pub fn run() {
             // ── Agent state (Windows only) ────────────────────────────
             #[cfg(target_os = "windows")]
             app.manage(Arc::new(agent::AgentState::new()));
+
+            // ── Gateway state ──────────────────────────────────────────
+            app.manage(Arc::new(gateway::GatewayState::new()));
 
             // ── SQLite database for conversation history ──────────
             let app_data_dir = app
@@ -1084,6 +1095,16 @@ pub fn run() {
             commands::reset_conversation,
             #[cfg(not(coverage))]
             commands::get_model_config,
+            #[cfg(not(coverage))]
+            commands::set_active_model,
+            #[cfg(not(coverage))]
+            commands::get_ollama_url,
+            #[cfg(not(coverage))]
+            commands::set_ollama_url,
+            #[cfg(not(coverage))]
+            commands::get_settings,
+            #[cfg(not(coverage))]
+            commands::set_setting,
             #[cfg(not(coverage))]
             history::save_conversation,
             #[cfg(not(coverage))]
@@ -1155,10 +1176,31 @@ pub fn run() {
             #[cfg(all(target_os = "windows", not(coverage)))]
             agent::get_agent_status,
             #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::confirm_agent_action,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::reject_agent_action,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::set_agent_provider,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            agent::get_agent_provider,
+            #[cfg(all(target_os = "windows", not(coverage)))]
             computer_control::execute_action_command,
             #[cfg(all(target_os = "windows", not(coverage)))]
             windows_screenshot::capture_silent_screenshot,
             // Minibar commands (Windows only)
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            autostart::is_auto_start_enabled_command,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            autostart::enable_auto_start_command,
+            #[cfg(all(target_os = "windows", not(coverage)))]
+            autostart::disable_auto_start_command,
+            // Gateway commands
+            #[cfg(not(coverage))]
+            gateway::start_gateway,
+            #[cfg(not(coverage))]
+            gateway::stop_gateway,
+            #[cfg(not(coverage))]
+            gateway::get_gateway_status,
             #[cfg(all(target_os = "windows", not(coverage)))]
             windows_focus::enter_minibar_command,
             #[cfg(all(target_os = "windows", not(coverage)))]

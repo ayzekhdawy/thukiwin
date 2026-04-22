@@ -11,6 +11,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogicalSize } from '@tauri-apps/api/dpi';
+
 import { useOllama } from './hooks/useOllama';
 import type { Message } from './hooks/useOllama';
 import { useTts } from './hooks/useTts';
@@ -18,6 +19,7 @@ import { useConversationHistory } from './hooks/useConversationHistory';
 import { useAgentMode } from './hooks/useAgentMode';
 import { AgentIndicator } from './components/AgentIndicator';
 import { MinibarView } from './components/MinibarView';
+import { SettingsView } from './components/SettingsView';
 import { ConversationView } from './view/ConversationView';
 import { AskBarView, MAX_IMAGES } from './view/AskBarView';
 import { OnboardingView } from './view/onboarding/index';
@@ -32,6 +34,7 @@ import {
   SCREEN_CAPTURE_PLACEHOLDER,
   buildPrompt,
 } from './config/commands';
+import { detectComputerUseIntent } from './utils/intentDetection';
 import './App.css';
 
 /** Fallback model name used before get_model_config resolves at startup. */
@@ -49,14 +52,14 @@ const ONBOARDING_EVENT = 'thuki://onboarding';
 const HIDE_COMMIT_DELAY_MS = 350;
 
 /** Must match `OVERLAY_LOGICAL_WIDTH` in `src-tauri/src/lib.rs`. */
-const OVERLAY_WIDTH = 600;
+const OVERLAY_WIDTH = 650;
 /** Total transparent padding around the morphing container: pt-2(8) + pb-6(24) + motion py-2(16). */
 const CONTAINER_VERTICAL_PADDING = 48;
 /** Max morphing-container height in chat mode (matches `max-h-[600px]`) + vertical padding. */
 const MAX_CHAT_WINDOW_HEIGHT = 600 + CONTAINER_VERTICAL_PADDING;
 
 /** Must match `OVERLAY_LOGICAL_HEIGHT_COLLAPSED` in `src-tauri/src/lib.rs`. */
-const COLLAPSED_WINDOW_HEIGHT = 80;
+const COLLAPSED_WINDOW_HEIGHT = 60;
 
 /**
  * Parses a message to detect all valid slash commands present as whole words.
@@ -106,6 +109,8 @@ type OverlayState = 'visible' | 'hidden' | 'hiding' | 'minibar';
 function App() {
   const [query, setQuery] = useState('');
   const [overlayState, setOverlayState] = useState<OverlayState>('hidden');
+  const overlayStateRef = useRef<OverlayState>(overlayState);
+  overlayStateRef.current = overlayState;
   /** Non-null when the backend signals onboarding is needed; holds the current stage. */
   const [onboardingStage, setOnboardingStage] =
     useState<OnboardingStage | null>(null);
@@ -116,6 +121,10 @@ function App() {
    * but rendered differently based on `isChatMode`).
    */
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  /** Ref mirror of isSettingsOpen so event listeners can check it without stale closures. */
+  const isSettingsOpenRef = useRef(false);
+  isSettingsOpenRef.current = isSettingsOpen;
   /**
    * True when the user clicked + while an unsaved conversation is active.
    * Causes the history dropdown to show a SwitchConfirmation prompt instead
@@ -314,6 +323,9 @@ function App() {
         /* v8 ignore start -- ResizeObserver callback requires a native browser resize event */
         (entries) => {
           requestAnimationFrame(() => {
+            if (overlayStateRef.current === 'minibar') return;
+            // Don't resize while settings panel is open — it's a modal overlay.
+            if (isSettingsOpenRef.current) return;
             for (const entry of entries) {
               const rect = entry.target.getBoundingClientRect();
               // Total vertical room: 8px (pt-2) + 24px (pb-6) + 16px (motion py-2) = 48px.
@@ -1012,6 +1024,28 @@ function App() {
     )
       return;
 
+    // Auto-detect computer-use intent. If the user is asking about screen content
+    // or requesting a vision analysis (but not explicitly using /screen or /do),
+    // automatically capture a screenshot and send it to the vision model.
+    if (!hasScreen && !found.has('/do') && !utilityTrigger) {
+      const intent = detectComputerUseIntent(strippedMessage);
+      if (intent === 'vision') {
+        // Treat as a /screen request with the user's message as the query.
+        void handleScreenSubmit(trimmedQuery, hasThink);
+        return;
+      }
+      if (intent === 'agent') {
+        const task = strippedMessage || selectedContext?.trim() || '';
+        if (task) {
+          setQuery('');
+          setSelectedContext(null);
+          setAttachedImages([]);
+          void agentMode.start(task);
+          return;
+        }
+      }
+    }
+
     if (hasScreen) {
       // Fire-and-forget: the async path handles cleanup and ask() invocation.
       void handleScreenSubmit(trimmedQuery, hasThink);
@@ -1256,6 +1290,7 @@ function App() {
     let unlistenVisibility: (() => void) | undefined;
     let unlistenOnboarding: (() => void) | undefined;
     let unlistenMinibar: (() => void) | undefined;
+    let unlistenNotification: { unregister: () => Promise<void> } | undefined;
 
     const attachListeners = async () => {
       unlistenVisibility = await listen<OverlayVisibilityPayload>(
@@ -1280,6 +1315,8 @@ function App() {
         },
       );
       unlistenMinibar = await listen('thuki://minibar', () => {
+        // Don't shrink to minibar while settings panel is open.
+        if (isSettingsOpenRef.current) return;
         setOverlayState((prev) => {
           if (prev === 'visible' || prev === 'hiding') {
             void invoke('enter_minibar_size');
@@ -1288,6 +1325,21 @@ function App() {
           return prev;
         });
       });
+      // Clicking a desktop notification restores the overlay from minibar/hidden.
+      try {
+        // Use Tauri notification plugin's onAction to detect notification clicks.
+        const { onAction } = await import('@tauri-apps/plugin-notification');
+        unlistenNotification = await onAction(() => {
+          if (overlayStateRef.current === 'minibar') {
+            void invoke('exit_minibar_size');
+            setOverlayState('visible');
+          } else if (overlayStateRef.current === 'hidden') {
+            void invoke('notify_overlay_hidden');
+          }
+        });
+      } catch {
+        // Notification action listener not supported in test env.
+      }
       // Both listeners registered — safe to let Rust decide what to show on launch.
       await invoke('notify_frontend_ready');
     };
@@ -1297,6 +1349,7 @@ function App() {
       unlistenVisibility?.();
       unlistenOnboarding?.();
       unlistenMinibar?.();
+      unlistenNotification?.unregister();
     };
   }, [replayEntranceAnimation, requestHideOverlay]);
 
@@ -1306,16 +1359,20 @@ function App() {
    * backend and triggers the frontend exit animation sequence.
    */
   const handleCloseOverlay = useCallback(() => {
+    // Don't close the overlay while settings panel is open.
+    if (isSettingsOpenRef.current) return;
     void invoke('notify_overlay_hidden');
     requestHideOverlay();
   }, [requestHideOverlay]);
 
   const handleMinimize = useCallback(() => {
-    // With skipTaskbar=true, minimize() hides the window with no way to
-    // restore from the taskbar. Use the normal hide flow instead so
-    // double-tap Ctrl brings it back with state preserved.
-    handleCloseOverlay();
-  }, [handleCloseOverlay]);
+    // Don't minimize while settings panel is open.
+    if (isSettingsOpenRef.current) return;
+    // Instead of hiding, shrink to minibar mode (floating icon).
+    // The user can click the icon to restore the full overlay.
+    void invoke('enter_minibar_size');
+    setOverlayState('minibar');
+  }, []);
 
   /** Copy the last assistant response to the clipboard. */
   const handleCopyLastResponse = useCallback(() => {
@@ -1487,9 +1544,7 @@ function App() {
                   transition:
                     'height 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-height 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
-                className={`morphing-container relative flex flex-col bg-surface-base max-h-[600px] overflow-hidden rounded-lg ${
-                  isChatMode ? 'shadow-chat' : 'shadow-bar'
-                }`}
+                className={`morphing-container relative flex flex-col bg-surface-base max-h-[600px] overflow-hidden`}
               >
                 {/* Chat Messages Area — morphs in when in chat mode */}
                 <AnimatePresence>
@@ -1593,6 +1648,7 @@ function App() {
                   inputRef={inputRef}
                   selectedText={selectedContext ?? undefined}
                   onHistoryOpen={handleHistoryToggle}
+                  onSettingsOpen={() => setIsSettingsOpen(true)}
                   attachedImages={isSubmitPending ? [] : attachedImages}
                   onImagesAttached={handleImagesAttached}
                   onImageRemove={handleImageRemove}
@@ -1616,7 +1672,7 @@ function App() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -8, scale: 0.97 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    className="history-dropdown absolute left-2 top-10 z-50 w-56 rounded-lg border border-surface-border bg-surface-base shadow-chat overflow-hidden flex flex-col"
+                    className="history-dropdown absolute left-2 top-10 z-50 w-56 rounded-lg border border-surface-border bg-surface-base overflow-hidden flex flex-col"
                   >
                     <HistoryPanel
                       listConversations={listConversations}
@@ -1652,6 +1708,15 @@ function App() {
         imageUrl={previewImageUrl}
         onClose={() => setPreviewImageUrl(null)}
       />
+
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <SettingsView
+            modelConfig={modelConfig}
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

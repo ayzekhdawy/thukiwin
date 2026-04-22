@@ -201,8 +201,9 @@ pub fn load_system_prompt() -> String {
 /// Model configuration loaded once at startup from the `THUKI_SUPPORTED_AI_MODELS`
 /// environment variable (comma-separated list). The first entry is the active model
 /// used for inference. Falls back to `DEFAULT_MODEL_NAME` when unset or empty.
+/// Wrapped in a Mutex so the active model can be changed at runtime from settings.
 pub struct ModelConfig {
-    pub active: String,
+    pub active: Mutex<String>,
     pub all: Vec<String>,
 }
 
@@ -225,7 +226,7 @@ pub fn load_model_config() -> ModelConfig {
         .cloned()
         .unwrap_or_else(|| DEFAULT_MODEL_NAME.to_string());
     ModelConfig {
-        active,
+        active: Mutex::new(active),
         all: models,
     }
 }
@@ -234,7 +235,78 @@ pub fn load_model_config() -> ModelConfig {
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[cfg_attr(not(coverage), tauri::command)]
 pub fn get_model_config(model_config: tauri::State<'_, ModelConfig>) -> serde_json::Value {
-    serde_json::json!({ "active": model_config.active, "all": model_config.all })
+    let active = model_config.active.lock().unwrap().clone();
+    serde_json::json!({ "active": active, "all": model_config.all })
+}
+
+/// Changes the active model at runtime.
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg_attr(not(coverage), tauri::command)]
+pub fn set_active_model(model_config: tauri::State<'_, ModelConfig>, model: String) -> Result<(), String> {
+    if !model_config.all.contains(&model) {
+        return Err(format!("Model '{}' is not in the supported list", model));
+    }
+    *model_config.active.lock().unwrap() = model;
+    Ok(())
+}
+
+/// Returns the current Ollama URL.
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg_attr(not(coverage), tauri::command)]
+pub fn get_ollama_url(ollama_url: tauri::State<'_, OllamaUrl>) -> String {
+    ollama_url.0.lock().unwrap().clone()
+}
+
+/// Updates the Ollama URL at runtime.
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg_attr(not(coverage), tauri::command)]
+pub fn set_ollama_url(ollama_url: tauri::State<'_, OllamaUrl>, url: String) -> Result<(), String> {
+    // Basic validation: must start with http:// or https://
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL must start with http:// or https://".to_string());
+    }
+    *ollama_url.0.lock().unwrap() = url;
+    Ok(())
+}
+
+/// Wraps the Ollama URL in a Mutex for runtime mutability.
+pub struct OllamaUrl(pub Mutex<String>);
+
+// ─── Settings persistence ─────────────────────────────────────────────────────
+
+/// Returns all settings from the app_config table as a JSON object.
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg_attr(not(coverage), tauri::command)]
+pub fn get_settings(db: State<'_, crate::history::Database>) -> Result<serde_json::Value, String> {
+    let conn = db.0.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    let mut settings = serde_json::Map::new();
+
+    // Read all key-value pairs from app_config.
+    let mut stmt = conn
+        .prepare("SELECT key, value FROM app_config")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        let (key, value) = row.map_err(|e| e.to_string())?;
+        settings.insert(key, serde_json::Value::String(value));
+    }
+
+    Ok(serde_json::Value::Object(settings))
+}
+
+/// Sets a single setting in the app_config table.
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[cfg_attr(not(coverage), tauri::command)]
+pub fn set_setting(
+    key: String,
+    value: String,
+    db: State<'_, crate::history::Database>,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    crate::database::set_config(&conn, &key, &value).map_err(|e| e.to_string())
 }
 
 /// Core streaming logic for Ollama `/api/chat`, separated from the Tauri
@@ -364,8 +436,10 @@ pub async fn ask_ollama(
     history: State<'_, ConversationHistory>,
     system_prompt: State<'_, SystemPrompt>,
     model_config: State<'_, ModelConfig>,
+    ollama_url: State<'_, OllamaUrl>,
 ) -> Result<(), String> {
-    let endpoint = format!("{}/api/chat", DEFAULT_OLLAMA_URL.trim_end_matches('/'));
+    let url = ollama_url.0.lock().unwrap().clone();
+    let endpoint = format!("{}/api/chat", url.trim_end_matches('/'));
     let cancel_token = CancellationToken::new();
     generation.set(cancel_token.clone());
 
@@ -410,9 +484,10 @@ pub async fn ask_ollama(
         (epoch, msgs)
     };
 
+    let active_model = model_config.active.lock().unwrap().clone();
     let accumulated = stream_ollama_chat(
         &endpoint,
-        &model_config.active,
+        &active_model,
         messages,
         think,
         &client,
@@ -1070,7 +1145,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("THUKI_SUPPORTED_AI_MODELS");
         let config = load_model_config();
-        assert_eq!(config.active, DEFAULT_MODEL_NAME);
+        assert_eq!(*config.active.lock().unwrap(), DEFAULT_MODEL_NAME);
         assert_eq!(config.all, vec![DEFAULT_MODEL_NAME.to_string()]);
     }
 
@@ -1079,7 +1154,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("THUKI_SUPPORTED_AI_MODELS", "gemma4:e4b");
         let config = load_model_config();
-        assert_eq!(config.active, "gemma4:e4b");
+        assert_eq!(*config.active.lock().unwrap(), "gemma4:e4b");
         assert_eq!(config.all, vec!["gemma4:e4b".to_string()]);
         std::env::remove_var("THUKI_SUPPORTED_AI_MODELS");
     }
@@ -1089,7 +1164,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("THUKI_SUPPORTED_AI_MODELS", "gemma4:e2b,gemma4:e4b");
         let config = load_model_config();
-        assert_eq!(config.active, "gemma4:e2b");
+        assert_eq!(*config.active.lock().unwrap(), "gemma4:e2b");
         assert_eq!(
             config.all,
             vec!["gemma4:e2b".to_string(), "gemma4:e4b".to_string()]
@@ -1102,7 +1177,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("THUKI_SUPPORTED_AI_MODELS", " gemma4:e2b , gemma4:e4b ");
         let config = load_model_config();
-        assert_eq!(config.active, "gemma4:e2b");
+        assert_eq!(*config.active.lock().unwrap(), "gemma4:e2b");
         assert_eq!(
             config.all,
             vec!["gemma4:e2b".to_string(), "gemma4:e4b".to_string()]
@@ -1115,7 +1190,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("THUKI_SUPPORTED_AI_MODELS", "   ");
         let config = load_model_config();
-        assert_eq!(config.active, DEFAULT_MODEL_NAME);
+        assert_eq!(*config.active.lock().unwrap(), DEFAULT_MODEL_NAME);
         assert_eq!(config.all, vec![DEFAULT_MODEL_NAME.to_string()]);
         std::env::remove_var("THUKI_SUPPORTED_AI_MODELS");
     }
@@ -1139,7 +1214,7 @@ mod tests {
         // The active model must still fall back to DEFAULT_MODEL_NAME.
         std::env::set_var("THUKI_SUPPORTED_AI_MODELS", ",");
         let config = load_model_config();
-        assert_eq!(config.active, DEFAULT_MODEL_NAME);
+        assert_eq!(*config.active.lock().unwrap(), DEFAULT_MODEL_NAME);
         assert_eq!(config.all, Vec::<String>::new());
         std::env::remove_var("THUKI_SUPPORTED_AI_MODELS");
     }
