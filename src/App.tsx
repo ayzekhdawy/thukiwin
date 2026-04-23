@@ -19,7 +19,6 @@ import { useConversationHistory } from './hooks/useConversationHistory';
 import { useAgentMode } from './hooks/useAgentMode';
 import { AgentIndicator } from './components/AgentIndicator';
 import { MinibarView } from './components/MinibarView';
-import { SettingsView } from './components/SettingsView';
 import { ConversationView } from './view/ConversationView';
 import { AskBarView, MAX_IMAGES } from './view/AskBarView';
 import { OnboardingView } from './view/onboarding/index';
@@ -121,10 +120,6 @@ function App() {
    * but rendered differently based on `isChatMode`).
    */
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  /** Ref mirror of isSettingsOpen so event listeners can check it without stale closures. */
-  const isSettingsOpenRef = useRef(false);
-  isSettingsOpenRef.current = isSettingsOpen;
   /**
    * True when the user clicked + while an unsaved conversation is active.
    * Causes the history dropdown to show a SwitchConfirmation prompt instead
@@ -324,8 +319,6 @@ function App() {
         (entries) => {
           requestAnimationFrame(() => {
             if (overlayStateRef.current === 'minibar') return;
-            // Don't resize while settings panel is open — it's a modal overlay.
-            if (isSettingsOpenRef.current) return;
             for (const entry of entries) {
               const rect = entry.target.getBoundingClientRect();
               // Total vertical room: 8px (pt-2) + 24px (pb-6) + 16px (motion py-2) = 48px.
@@ -1315,8 +1308,6 @@ function App() {
         },
       );
       unlistenMinibar = await listen('thuki://minibar', () => {
-        // Don't shrink to minibar while settings panel is open.
-        if (isSettingsOpenRef.current) return;
         setOverlayState((prev) => {
           if (prev === 'visible' || prev === 'hiding') {
             void invoke('enter_minibar_size');
@@ -1359,15 +1350,11 @@ function App() {
    * backend and triggers the frontend exit animation sequence.
    */
   const handleCloseOverlay = useCallback(() => {
-    // Don't close the overlay while settings panel is open.
-    if (isSettingsOpenRef.current) return;
     void invoke('notify_overlay_hidden');
     requestHideOverlay();
   }, [requestHideOverlay]);
 
   const handleMinimize = useCallback(() => {
-    // Don't minimize while settings panel is open.
-    if (isSettingsOpenRef.current) return;
     // Instead of hiding, shrink to minibar mode (floating icon).
     // The user can click the icon to restore the full overlay.
     void invoke('enter_minibar_size');
@@ -1648,7 +1635,7 @@ function App() {
                   inputRef={inputRef}
                   selectedText={selectedContext ?? undefined}
                   onHistoryOpen={handleHistoryToggle}
-                  onSettingsOpen={() => setIsSettingsOpen(true)}
+                  onSettingsOpen={() => { void invoke('open_settings_window'); }}
                   attachedImages={isSubmitPending ? [] : attachedImages}
                   onImagesAttached={handleImagesAttached}
                   onImageRemove={handleImageRemove}
@@ -1708,15 +1695,6 @@ function App() {
         imageUrl={previewImageUrl}
         onClose={() => setPreviewImageUrl(null)}
       />
-
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <SettingsView
-            modelConfig={modelConfig}
-            onClose={() => setIsSettingsOpen(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

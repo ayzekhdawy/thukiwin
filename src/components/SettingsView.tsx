@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { motion } from 'framer-motion';
 
 /** Provider type for agent mode. */
 type AgentProvider = 'ollama' | 'openai' | 'anthropic';
 
+/** Notification sound method. */
+type NotificationSound = 'system' | 'custom' | 'none';
+
 interface SettingsViewProps {
   modelConfig: { active: string; all: string[] } | null;
-  onClose: () => void;
+  onClose?: () => void;
+  /** When true, renders as standalone page (no close button in header). */
+  isStandalone?: boolean;
 }
 
 /** Recommended models for each provider. */
@@ -43,7 +47,7 @@ export const SETTINGS_ICON = (
   </svg>
 );
 
-export function SettingsView({ modelConfig, onClose }: SettingsViewProps) {
+export function SettingsView({ modelConfig, onClose, isStandalone }: SettingsViewProps) {
   const [selectedModel, setSelectedModel] = useState(modelConfig?.active ?? '');
   const [ollamaUrl, setOllamaUrl] = useState('http://127.0.0.1:11434');
   const [autoStart, setAutoStart] = useState(false);
@@ -59,6 +63,13 @@ export function SettingsView({ modelConfig, onClose }: SettingsViewProps) {
   const [agentApiKey, setAgentApiKey] = useState('');
   const [agentBaseUrl, setAgentBaseUrl] = useState('https://api.openai.com/v1');
 
+  // Sound settings.
+  const [notificationSound, setNotificationSound] = useState<NotificationSound>('system');
+  const [ttsVoice, setTtsVoice] = useState('tr-TR-EmelNeural');
+  const [ttsRate, setTtsRate] = useState(0);
+  const [ttsPitch, setTtsPitch] = useState(0);
+  const [ttsVoices, setTtsVoices] = useState<{ name: string; ShortName: string; Locale: string; gender: string }[]>([]);
+
   // Load current settings on mount.
   useEffect(() => {
     const loadSettings = async () => {
@@ -72,6 +83,10 @@ export function SettingsView({ modelConfig, onClose }: SettingsViewProps) {
         if (settings['active_model']) setSelectedModel(settings['active_model']);
         if (settings['gateway_enabled'] === 'true') setGatewayEnabled(true);
         if (settings['gateway_port']) setGatewayPort(settings['gateway_port']);
+        if (settings['notification_sound']) setNotificationSound(settings['notification_sound'] as NotificationSound);
+        if (settings['tts_voice']) setTtsVoice(settings['tts_voice']);
+        if (settings['tts_rate']) setTtsRate(Number(settings['tts_rate']));
+        if (settings['tts_pitch']) setTtsPitch(Number(settings['tts_pitch']));
       } catch { /* use defaults */ }
 
       try {
@@ -99,6 +114,16 @@ export function SettingsView({ modelConfig, onClose }: SettingsViewProps) {
         if (settings['agent_model']) setAgentModel(settings['agent_model']);
         if (settings['agent_base_url']) setAgentBaseUrl(settings['agent_base_url']);
       } catch { /* use defaults */ }
+
+      // Load TTS voice from localStorage (fallback).
+      const storedVoice = localStorage.getItem('tts_voice');
+      if (storedVoice) setTtsVoice(storedVoice);
+
+      // Fetch available TTS voices.
+      try {
+        const voices = await invoke<Array<{ name: string; ShortName: string; Locale: string; gender: string }>>('tts_list_voices');
+        setTtsVoices(voices);
+      } catch { /* TTS not available */ }
     };
     void loadSettings();
   }, []);
@@ -150,6 +175,15 @@ export function SettingsView({ modelConfig, onClose }: SettingsViewProps) {
         await invoke('set_setting', { key: `api_key_${agentProvider}`, value: agentApiKey });
       }
 
+      // Save sound settings.
+      await invoke('set_setting', { key: 'notification_sound', value: notificationSound });
+      await invoke('set_setting', { key: 'tts_voice', value: ttsVoice });
+      await invoke('set_setting', { key: 'tts_rate', value: String(ttsRate) });
+      await invoke('set_setting', { key: 'tts_pitch', value: String(ttsPitch) });
+
+      // Persist TTS voice in localStorage for useTts hook compatibility.
+      localStorage.setItem('tts_voice', ttsVoice);
+
       setSuccess('Settings saved');
       setTimeout(() => setSuccess(null), 2000);
     } catch (e) {
@@ -157,216 +191,304 @@ export function SettingsView({ modelConfig, onClose }: SettingsViewProps) {
     } finally {
       setSaving(false);
     }
-  }, [selectedModel, ollamaUrl, autoStart, gatewayEnabled, gatewayPort, modelConfig, agentProvider, agentModel, agentBaseUrl, agentApiKey]);
+  }, [selectedModel, ollamaUrl, autoStart, gatewayEnabled, gatewayPort, modelConfig, agentProvider, agentModel, agentBaseUrl, agentApiKey, notificationSound, ttsVoice, ttsRate, ttsPitch]);
+
+  const handleClose = useCallback(() => {
+    if (onClose) {
+      onClose();
+    } else {
+      // In standalone mode, hide the Tauri window.
+      void invoke('plugin:window|hide');
+    }
+  }, [onClose]);
+
+  // Group TTS voices by locale.
+  const voicesByLocale = ttsVoices.reduce<Record<string, typeof ttsVoices>>((acc, v) => {
+    const locale = v.Locale;
+    if (!acc[locale]) acc[locale] = [];
+    acc[locale].push(v);
+    return acc;
+  }, {});
+
+  const sortedLocales = Object.keys(voicesByLocale).sort();
 
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-
-      {/* Settings panel */}
-      <motion.div
-        className="relative z-10 w-full max-w-sm bg-surface-base border border-surface-border rounded-xl shadow-lg overflow-hidden"
-        initial={{ scale: 0.95, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: 20 }}
-        transition={{ duration: 0.15 }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
-          <h2 className="text-sm font-semibold text-text-primary">Settings</h2>
+    <div className="w-full h-full bg-surface-base text-text-primary flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border shrink-0">
+        <h2 className="text-sm font-semibold text-text-primary">Settings</h2>
+        {isStandalone && (
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-text-secondary hover:text-text-primary transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
-        </div>
+        )}
+      </div>
 
-        {/* Body */}
-        <div className="px-4 py-3 space-y-4 max-h-[60vh] overflow-y-auto">
-          {/* Chat Model (Ollama) */}
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">
-              Chat Model (Ollama)
-            </label>
-            {modelConfig && modelConfig.all.length > 0 ? (
-              <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
-              >
-                {modelConfig.all.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                placeholder="Model name"
-                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
-              />
-            )}
-          </div>
-
-          {/* Ollama URL */}
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">
-              Ollama URL
-            </label>
+      {/* Body */}
+      <div className="px-4 py-3 space-y-4 overflow-y-auto flex-1">
+        {/* Chat Model (Ollama) */}
+        <div>
+          <label className="block text-xs font-medium text-text-secondary mb-1">
+            Chat Model (Ollama)
+          </label>
+          {modelConfig && modelConfig.all.length > 0 ? (
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+            >
+              {modelConfig.all.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          ) : (
             <input
               type="text"
-              value={ollamaUrl}
-              onChange={(e) => setOllamaUrl(e.target.value)}
-              placeholder="http://127.0.0.1:11434"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              placeholder="Model name"
               className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
             />
-          </div>
+          )}
+        </div>
 
-          {/* Agent Provider section */}
-          <div className="pt-2 border-t border-surface-border">
-            <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-              Agent Mode (Computer Use)
-            </h3>
+        {/* Ollama URL */}
+        <div>
+          <label className="block text-xs font-medium text-text-secondary mb-1">
+            Ollama URL
+          </label>
+          <input
+            type="text"
+            value={ollamaUrl}
+            onChange={(e) => setOllamaUrl(e.target.value)}
+            placeholder="http://127.0.0.1:11434"
+            className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+          />
+        </div>
 
-            <div className="space-y-3">
-              {/* Provider selector */}
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
-                  Provider
-                </label>
-                <select
-                  value={agentProvider}
-                  onChange={(e) => setAgentProvider(e.target.value as AgentProvider)}
-                  className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
-                >
-                  <option value="ollama">Ollama (Local)</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
-              </div>
+        {/* ── Sound Method Section ── */}
+        <div className="pt-2 border-t border-surface-border">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
+            Sound
+          </h3>
 
-              {/* Model selector */}
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
-                  Agent Model
-                </label>
-                <select
-                  value={agentModel}
-                  onChange={(e) => setAgentModel(e.target.value)}
-                  className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
-                >
-                  {PROVIDER_MODELS[agentProvider].map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
+          <div className="space-y-3">
+            {/* Notification Sound */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                Notification Sound
+              </label>
+              <select
+                value={notificationSound}
+                onChange={(e) => setNotificationSound(e.target.value as NotificationSound)}
+                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+              >
+                <option value="system">System Default</option>
+                <option value="custom">Custom Sound</option>
+                <option value="none">Silent</option>
+              </select>
+            </div>
 
-              {/* API Key (only for cloud providers) */}
-              {agentProvider !== 'ollama' && (
-                <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1">
-                    API Key
-                  </label>
-                  <input
-                    type="password"
-                    value={agentApiKey}
-                    onChange={(e) => setAgentApiKey(e.target.value)}
-                    placeholder={agentProvider === 'openai' ? 'sk-...' : 'sk-ant-...'}
-                    className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
-                  />
-                </div>
-              )}
+            {/* TTS Voice */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                TTS Voice (Text-to-Speech)
+              </label>
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+              >
+                {sortedLocales.map((locale) => (
+                  <optgroup key={locale} label={locale}>
+                    {voicesByLocale[locale].map((v) => (
+                      <option key={v.ShortName} value={v.ShortName}>
+                        {v.ShortName} ({v.gender})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
 
-              {/* Base URL (editable for custom endpoints) */}
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
-                  Base URL
-                </label>
+            {/* TTS Rate */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                TTS Speed
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-secondary">Slow</span>
                 <input
-                  type="text"
-                  value={agentBaseUrl}
-                  onChange={(e) => setAgentBaseUrl(e.target.value)}
-                  className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={ttsRate}
+                  onChange={(e) => setTtsRate(Number(e.target.value))}
+                  className="flex-1 accent-primary"
                 />
+                <span className="text-xs text-text-secondary">Fast</span>
+              </div>
+            </div>
+
+            {/* TTS Pitch */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                TTS Pitch
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-secondary">Low</span>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={ttsPitch}
+                  onChange={(e) => setTtsPitch(Number(e.target.value))}
+                  className="flex-1 accent-primary"
+                />
+                <span className="text-xs text-text-secondary">High</span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Auto-start */}
-          <div className="flex items-center justify-between">
+        {/* Agent Provider section */}
+        <div className="pt-2 border-t border-surface-border">
+          <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
+            Agent Mode (Computer Use)
+          </h3>
+
+          <div className="space-y-3">
+            {/* Provider selector */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                Provider
+              </label>
+              <select
+                value={agentProvider}
+                onChange={(e) => setAgentProvider(e.target.value as AgentProvider)}
+                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+              >
+                <option value="ollama">Ollama (Local)</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
+
+            {/* Model selector */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                Agent Model
+              </label>
+              <select
+                value={agentModel}
+                onChange={(e) => setAgentModel(e.target.value)}
+                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+              >
+                {PROVIDER_MODELS[agentProvider].map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* API Key (only for cloud providers) */}
+            {agentProvider !== 'ollama' && (
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  value={agentApiKey}
+                  onChange={(e) => setAgentApiKey(e.target.value)}
+                  placeholder={agentProvider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                  className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+                />
+              </div>
+            )}
+
+            {/* Base URL (editable for custom endpoints) */}
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                Base URL
+              </label>
+              <input
+                type="text"
+                value={agentBaseUrl}
+                onChange={(e) => setAgentBaseUrl(e.target.value)}
+                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Auto-start */}
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-text-secondary">
+            Start on Boot
+          </label>
+          <button
+            onClick={() => setAutoStart(!autoStart)}
+            className={`relative w-10 h-5 rounded-full transition-colors ${
+              autoStart ? 'bg-primary' : 'bg-surface-elevated'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                autoStart ? 'left-5' : 'left-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Gateway */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
             <label className="text-xs font-medium text-text-secondary">
-              Start on Boot
+              Local Gateway
             </label>
             <button
-              onClick={() => setAutoStart(!autoStart)}
+              onClick={() => setGatewayEnabled(!gatewayEnabled)}
               className={`relative w-10 h-5 rounded-full transition-colors ${
-                autoStart ? 'bg-primary' : 'bg-surface-elevated'
+                gatewayEnabled ? 'bg-primary' : 'bg-surface-elevated'
               }`}
             >
               <span
                 className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                  autoStart ? 'left-5' : 'left-0.5'
+                  gatewayEnabled ? 'left-5' : 'left-0.5'
                 }`}
               />
             </button>
           </div>
-
-          {/* Gateway */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-text-secondary">
-                Local Gateway
-              </label>
-              <button
-                onClick={() => setGatewayEnabled(!gatewayEnabled)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${
-                  gatewayEnabled ? 'bg-primary' : 'bg-surface-elevated'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                    gatewayEnabled ? 'left-5' : 'left-0.5'
-                  }`}
-                />
-              </button>
-            </div>
-            {gatewayEnabled && (
-              <input
-                type="text"
-                value={gatewayPort}
-                onChange={(e) => setGatewayPort(e.target.value)}
-                placeholder="18789"
-                className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
-              />
-            )}
-          </div>
+          {gatewayEnabled && (
+            <input
+              type="text"
+              value={gatewayPort}
+              onChange={(e) => setGatewayPort(e.target.value)}
+              placeholder="18789"
+              className="w-full bg-surface-elevated border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
+            />
+          )}
         </div>
+      </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-surface-border flex items-center justify-between">
-          {error && <span className="text-xs text-red-400">{error}</span>}
-          {success && <span className="text-xs text-emerald-400">{success}</span>}
-          {!error && !success && <span />}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-1.5 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-surface-border flex items-center justify-between shrink-0">
+        {error && <span className="text-xs text-red-400">{error}</span>}
+        {success && <span className="text-xs text-emerald-400">{success}</span>}
+        {!error && !success && <span />}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-1.5 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </div>
   );
 }

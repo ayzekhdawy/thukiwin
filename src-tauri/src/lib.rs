@@ -53,7 +53,7 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, RunEvent,
+    Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder,
 };
 
 #[cfg(target_os = "macos")]
@@ -472,6 +472,30 @@ fn show_overlay(app_handle: &tauri::AppHandle, ctx: crate::context::ActivationCo
             None,
         );
     }
+}
+
+/// Opens the settings window. If already open, focuses it.
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[tauri::command]
+fn open_settings_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("settings") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let window = WebviewWindowBuilder::new(&app_handle, "settings", WebviewUrl::App("settings.html".into()))
+        .title("Settings")
+        .inner_size(460.0, 580.0)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let _ = window.show();
+    let _ = window.set_focus();
+    Ok(())
 }
 
 /// Toggles the overlay between visible and hidden states.
@@ -1211,6 +1235,8 @@ pub fn run() {
             enter_minibar_size,
             #[cfg(all(target_os = "windows", not(coverage)))]
             exit_minibar_size,
+            // Settings window
+            open_settings_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -1225,6 +1251,11 @@ pub fn run() {
                     api.prevent_close();
 
                     request_overlay_hide(app_handle);
+                } else if label == "settings" {
+                    api.prevent_close();
+                    if let Some(window) = app_handle.get_webview_window("settings") {
+                        let _ = window.hide();
+                    }
                 }
             }
         });

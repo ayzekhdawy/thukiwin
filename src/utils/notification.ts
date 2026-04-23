@@ -5,6 +5,9 @@
  * Uses the Tauri notification plugin which delegates to Windows Toast
  * Notifications on Windows, NSUserNotificationCenter on macOS, and
  * libnotify on Linux.
+ *
+ * Supports configurable notification sound: system default, custom sound,
+ * or silent.
  */
 
 import {
@@ -12,9 +15,16 @@ import {
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification';
+import { invoke } from '@tauri-apps/api/core';
 
 /** Whether we have already requested (and received) notification permission. */
 let permissionGranted = false;
+
+/** Cached notification sound setting. */
+let cachedSoundSetting: string | null = null;
+
+/** Currently playing notification audio element. */
+let notificationAudio: HTMLAudioElement | null = null;
 
 /**
  * Requests notification permission from the OS if we have not already done so.
@@ -39,6 +49,42 @@ async function ensurePermission(): Promise<boolean> {
 }
 
 /**
+ * Gets the current notification sound setting from app_config.
+ * Caches the result to avoid repeated IPC calls.
+ */
+async function getNotificationSoundSetting(): Promise<string> {
+  if (cachedSoundSetting !== null) return cachedSoundSetting;
+  try {
+    const settings = await invoke<Record<string, string>>('get_settings');
+    cachedSoundSetting = settings['notification_sound'] || 'system';
+  } catch {
+    cachedSoundSetting = 'system';
+  }
+  return cachedSoundSetting;
+}
+
+/**
+ * Plays a custom notification sound from the bundled assets.
+ */
+function playCustomSound(): void {
+  if (notificationAudio) {
+    notificationAudio.pause();
+    notificationAudio = null;
+  }
+  const audio = new Audio('/sounds/notification.mp3');
+  notificationAudio = audio;
+  audio.onended = () => {
+    notificationAudio = null;
+  };
+  audio.onerror = () => {
+    notificationAudio = null;
+  };
+  void audio.play().catch(() => {
+    notificationAudio = null;
+  });
+}
+
+/**
  * Shows a desktop toast notification **only if** the app window is not focused.
  *
  * Call this when an AI response finishes streaming. The notification lets the
@@ -59,7 +105,27 @@ export async function notifyIfUnfocused(
   const granted = await ensurePermission();
   if (!granted) return;
 
-  sendNotification({ title, body });
+  const soundSetting = await getNotificationSoundSetting();
+
+  if (soundSetting === 'custom') {
+    // Send silent notification + play custom sound separately.
+    sendNotification({ title, body });
+    playCustomSound();
+  } else if (soundSetting === 'none') {
+    // Completely silent — suppress even the system notification sound.
+    sendNotification({ title, body });
+  } else {
+    // System default — OS handles the sound.
+    sendNotification({ title, body });
+  }
+}
+
+/**
+ * Invalidates the cached notification sound setting.
+ * Call this after changing the setting in the settings panel.
+ */
+export function invalidateNotificationSoundCache(): void {
+  cachedSoundSetting = null;
 }
 
 /**

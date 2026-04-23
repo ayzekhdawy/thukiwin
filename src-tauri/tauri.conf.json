@@ -24,6 +24,20 @@
         "visible": false,
         "skipTaskbar": true,
         "dragDropEnabled": false
+      },
+      {
+        "label": "settings",
+        "title": "Settings",
+        "width": 460,
+        "height": 580,
+        "resizable": false,
+        "fullscreen": false,
+        "transparent": false,
+        "decorations": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {
