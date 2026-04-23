@@ -22,6 +22,9 @@ export function MinibarView({ status, onClick }: MinibarViewProps) {
   const isPulsing = status === 'executing' || status === 'analyzing' || status === 'capturing';
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     const startX = e.clientX;
     const startY = e.clientY;
     let resolved = false;
@@ -33,6 +36,7 @@ export function MinibarView({ status, onClick }: MinibarViewProps) {
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
         resolved = true;
         cleanup();
+        // Start native drag — OS handles the rest including pointer-up.
         void getCurrentWindow().startDragging();
       }
     };

@@ -475,21 +475,33 @@ fn show_overlay(app_handle: &tauri::AppHandle, ctx: crate::context::ActivationCo
 }
 
 /// Opens the settings window. If already open, focuses it.
+/// Must be async — WebviewWindowBuilder deadlocks on Windows in sync commands.
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[tauri::command]
-fn open_settings_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+async fn open_settings_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app_handle.get_webview_window("settings") {
         let _ = window.show();
         let _ = window.set_focus();
         return Ok(());
     }
 
-    let window = WebviewWindowBuilder::new(&app_handle, "settings", WebviewUrl::App("settings.html".into()))
-        .title("Settings")
-        .inner_size(460.0, 580.0)
-        .resizable(false)
+    let url = if cfg!(debug_assertions) {
+        WebviewUrl::External("http://localhost:1420/settings.html".parse().unwrap())
+    } else {
+        WebviewUrl::App("settings.html".into())
+    };
+
+    let window = WebviewWindowBuilder::new(&app_handle, "settings", url)
+        .title("Settings — ThukiWin")
+        .inner_size(480.0, 700.0)
+        .min_inner_size(400.0, 500.0)
+        .center()
+        .resizable(true)
+        .decorations(true)
         .always_on_top(true)
         .skip_taskbar(true)
+        .visible(true)
+        .focused(true)
         .build()
         .map_err(|e| e.to_string())?;
 

@@ -63,9 +63,13 @@ pub fn disable_auto_start() -> Result<(), String> {
     if output.status.success() {
         Ok(())
     } else {
-        // Task doesn't exist is not an error.
+        // Task doesn't exist — not an error. Match error in English, Turkish, and by exit code.
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("could not be found") || stderr.contains("The system cannot find") {
+        if stderr.contains("could not be found")
+            || stderr.contains("The system cannot find")
+            || stderr.contains("belirtilen dosyayı bulamıyor")
+            || stderr.contains("bulunamadı")
+        {
             Ok(())
         } else {
             Err(format!("schtasks /Delete failed: {stderr}"))
