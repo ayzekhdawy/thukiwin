@@ -18,7 +18,7 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       pr: ${{ steps.release.outputs.pr }}
     steps:
-      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071  # v4.4.1
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
@@ -76,7 +76,7 @@ jobs:
         run: rustup toolchain install nightly-2026-03-30 --component llvm-tools --no-self-update
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@0c7a94999971db56e9df89df226240aab222e776  # v2.75.14
+        uses: taiki-e/install-action@b651345a718c8f44efa2460560b3dbf29cbd7ee1  # v2.75.26
         with:
           tool: cargo-llvm-cov
 
