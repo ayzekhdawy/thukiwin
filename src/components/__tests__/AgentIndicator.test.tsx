@@ -13,6 +13,8 @@ vi.mock('framer-motion', () => ({
     React.createElement(React.Fragment, null, children),
 }));
 
+const noop = () => {};
+
 describe('AgentIndicator', () => {
   it('should not render when inactive', () => {
     render(
@@ -21,7 +23,10 @@ describe('AgentIndicator', () => {
         status="idle"
         lastAction={null}
         reasoning={null}
-        onStop={() => {}}
+        pendingConfirmation={null}
+        onStop={noop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
     expect(screen.queryByText('Agent')).toBeNull();
@@ -34,7 +39,10 @@ describe('AgentIndicator', () => {
         status="capturing"
         lastAction={null}
         reasoning={null}
-        onStop={() => {}}
+        pendingConfirmation={null}
+        onStop={noop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
     expect(screen.getByText('Capturing screen...')).toBeDefined();
@@ -47,7 +55,10 @@ describe('AgentIndicator', () => {
         status="analyzing"
         lastAction={null}
         reasoning="Looking for the Start button"
-        onStop={() => {}}
+        pendingConfirmation={null}
+        onStop={noop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
     expect(screen.getByText('Analyzing...')).toBeDefined();
@@ -60,7 +71,10 @@ describe('AgentIndicator', () => {
         status="executing"
         lastAction="Click { x: 100, y: 200 }"
         reasoning={null}
-        onStop={() => {}}
+        pendingConfirmation={null}
+        onStop={noop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
     expect(screen.getByText('Executing action...')).toBeDefined();
@@ -75,7 +89,10 @@ describe('AgentIndicator', () => {
         status="executing"
         lastAction={null}
         reasoning={null}
+        pendingConfirmation={null}
         onStop={onStop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
 
@@ -90,7 +107,10 @@ describe('AgentIndicator', () => {
         status="done"
         lastAction={null}
         reasoning={null}
-        onStop={() => {}}
+        pendingConfirmation={null}
+        onStop={noop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
     expect(screen.getByText('Done')).toBeDefined();
@@ -103,7 +123,10 @@ describe('AgentIndicator', () => {
         status="error"
         lastAction={null}
         reasoning={null}
-        onStop={() => {}}
+        pendingConfirmation={null}
+        onStop={noop}
+        onConfirm={noop}
+        onReject={noop}
       />,
     );
     expect(screen.getByText('Error')).toBeDefined();

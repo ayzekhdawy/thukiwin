@@ -34,6 +34,11 @@ export const COMMANDS: readonly Command[] = [
     description: 'Think deeply before answering',
   },
   {
+    trigger: '/search',
+    label: '/search',
+    description: 'Agentic web search: iterative reasoning & cited synthesis',
+  },
+  {
     trigger: '/translate',
     label: '/translate',
     description: 'Translate text to another language',

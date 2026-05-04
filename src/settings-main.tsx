@@ -1,10 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { SettingsWindow } from './settings/SettingsWindow';
+import { ConfigProvider } from './contexts/ConfigContext';
 import './App.css';
-import { SettingsView } from './components/SettingsView';
 
 ReactDOM.createRoot(document.getElementById('settings-root') as HTMLElement).render(
   <React.StrictMode>
-    <SettingsView modelConfig={null} isStandalone />
+    <ConfigProvider>
+      <SettingsWindow />
+    </ConfigProvider>
   </React.StrictMode>,
 );

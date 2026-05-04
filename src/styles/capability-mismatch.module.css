@@ -1,0 +1,28 @@
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  font-size: 11px;
+  color: #fbbf24;
+  line-height: 1.4;
+}
+
+.icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.text {
+  flex: 1;
+}

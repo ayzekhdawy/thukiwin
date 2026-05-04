@@ -120,6 +120,10 @@ pub struct AgentState {
     history: Mutex<Vec<String>>,
     confirmation: Mutex<ConfirmationState>,
     provider_config: Mutex<Option<ProviderConfig>>,
+    /// Channel to signal the agent loop when the user confirms/rejects.
+    confirmation_tx: Mutex<Option<tokio::sync::oneshot::Sender<bool>>>,
+    /// The action_id currently awaiting confirmation.
+    pending_action_id: Mutex<Option<String>>,
 }
 
 impl AgentState {
@@ -130,6 +134,8 @@ impl AgentState {
             history: Mutex::new(Vec::new()),
             confirmation: Mutex::new(ConfirmationState::new()),
             provider_config: Mutex::new(None),
+            confirmation_tx: Mutex::new(None),
+            pending_action_id: Mutex::new(None),
         }
     }
 
@@ -158,6 +164,8 @@ impl AgentState {
         *self.status.lock().unwrap() = AgentStatus::Idle;
         self.history.lock().unwrap().clear();
         *self.confirmation.lock().unwrap() = ConfirmationState::new();
+        *self.confirmation_tx.lock().unwrap() = None;
+        *self.pending_action_id.lock().unwrap() = None;
     }
 
     pub fn set_provider_config(&self, config: ProviderConfig) {
@@ -544,6 +552,17 @@ async fn run_tool_use_loop(
                     conf.add_pending(action_id.clone(), action.clone(), desc.clone());
                 }
 
+                // Create a oneshot channel for the frontend to signal confirmation.
+                let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+                {
+                    let mut sender = state.confirmation_tx.lock().unwrap();
+                    *sender = Some(tx);
+                }
+                {
+                    let mut pending = state.pending_action_id.lock().unwrap();
+                    *pending = Some(action_id.clone());
+                }
+
                 state.set_status(AgentStatus::WaitingConfirmation);
                 let _ = app_handle.emit("thuki://agent", AgentEvent::StatusChanged(AgentStatus::WaitingConfirmation));
                 let _ = app_handle.emit("thuki://agent", AgentEvent::ConfirmationRequired {
@@ -552,14 +571,24 @@ async fn run_tool_use_loop(
                     description: desc,
                 });
 
-                // Auto-confirm for now until frontend confirmation UI is wired.
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                let confirmed_action = {
-                    let mut conf = state.confirmation.lock().unwrap();
-                    conf.confirm(&action_id)
-                };
-                if let Some(confirmed_action) = confirmed_action {
-                    execute_action_with_result(&app_handle, &state, &confirmed_action).await?;
+                // Wait for user confirmation with a 30-second timeout.
+                match tokio::time::timeout(Duration::from_secs(30), rx).await {
+                    Ok(Ok(true)) => {
+                        // User confirmed the action.
+                        let confirmed_action = {
+                            let mut conf = state.confirmation.lock().unwrap();
+                            conf.confirm(&action_id)
+                        };
+                        if let Some(confirmed_action) = confirmed_action {
+                            execute_action_with_result(&app_handle, &state, &confirmed_action).await?;
+                        }
+                    }
+                    _ => {
+                        // User rejected or timed out — reject the action.
+                        let mut conf = state.confirmation.lock().unwrap();
+                        conf.reject(&action_id);
+                        // Continue to next iteration without executing.
+                    }
                 }
             } else {
                 execute_action_with_result(&app_handle, &state, &action).await?;
@@ -785,6 +814,17 @@ async fn run_text_parse_loop(
                     conf.add_pending(action_id.clone(), action.clone(), desc.clone());
                 }
 
+                // Create a oneshot channel for the frontend to signal confirmation.
+                let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+                {
+                    let mut sender = state.confirmation_tx.lock().unwrap();
+                    *sender = Some(tx);
+                }
+                {
+                    let mut pending = state.pending_action_id.lock().unwrap();
+                    *pending = Some(action_id.clone());
+                }
+
                 state.set_status(AgentStatus::WaitingConfirmation);
                 let _ = app_handle.emit("thuki://agent", AgentEvent::StatusChanged(AgentStatus::WaitingConfirmation));
                 let _ = app_handle.emit("thuki://agent", AgentEvent::ConfirmationRequired {
@@ -793,15 +833,24 @@ async fn run_text_parse_loop(
                     description: desc,
                 });
 
-                // Auto-confirm for now until frontend confirmation UI is wired.
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                let confirmed_action = {
-                    let mut conf = state.confirmation.lock().unwrap();
-                    conf.confirm(&action_id)
-                };
-                if let Some(confirmed_action) = confirmed_action {
-                    actions_executed += 1;
-                    execute_action_with_result(&app_handle, &state, &confirmed_action).await?;
+                // Wait for user confirmation with a 30-second timeout.
+                match tokio::time::timeout(Duration::from_secs(30), rx).await {
+                    Ok(Ok(true)) => {
+                        // User confirmed the action.
+                        let confirmed_action = {
+                            let mut conf = state.confirmation.lock().unwrap();
+                            conf.confirm(&action_id)
+                        };
+                        if let Some(confirmed_action) = confirmed_action {
+                            actions_executed += 1;
+                            execute_action_with_result(&app_handle, &state, &confirmed_action).await?;
+                        }
+                    }
+                    _ => {
+                        // User rejected or timed out — reject the action.
+                        let mut conf = state.confirmation.lock().unwrap();
+                        conf.reject(&action_id);
+                    }
                 }
             } else {
                 actions_executed += 1;
@@ -924,10 +973,18 @@ pub fn confirm_agent_action(
     state: tauri::State<'_, Arc<AgentState>>,
     action_id: String,
 ) -> Result<String, String> {
-    let action = state.confirmation.lock().unwrap().confirm(&action_id);
-    match action {
-        Some(a) => Ok(describe_action(&a)),
-        None => Err("No pending action with that ID".to_string()),
+    // Verify the action_id matches the pending one.
+    let pending_id = state.pending_action_id.lock().unwrap().clone();
+    if pending_id.as_deref() != Some(action_id.as_str()) {
+        return Err("No pending action with that ID".to_string());
+    }
+    // Signal the agent loop to proceed.
+    let sender = state.confirmation_tx.lock().unwrap().take();
+    if let Some(tx) = sender {
+        let _ = tx.send(true);
+        Ok("Confirmed".to_string())
+    } else {
+        Err("No pending confirmation request".to_string())
     }
 }
 
@@ -937,10 +994,18 @@ pub fn reject_agent_action(
     state: tauri::State<'_, Arc<AgentState>>,
     action_id: String,
 ) -> Result<String, String> {
-    let action = state.confirmation.lock().unwrap().reject(&action_id);
-    match action {
-        Some(a) => Ok(describe_action(&a)),
-        None => Err("No pending action with that ID".to_string()),
+    // Verify the action_id matches the pending one.
+    let pending_id = state.pending_action_id.lock().unwrap().clone();
+    if pending_id.as_deref() != Some(action_id.as_str()) {
+        return Err("No pending action with that ID".to_string());
+    }
+    // Signal the agent loop to skip this action.
+    let sender = state.confirmation_tx.lock().unwrap().take();
+    if let Some(tx) = sender {
+        let _ = tx.send(false);
+        Ok("Rejected".to_string())
+    } else {
+        Err("No pending confirmation request".to_string())
     }
 }
 

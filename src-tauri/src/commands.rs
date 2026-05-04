@@ -93,13 +93,29 @@ pub struct ChatMessage {
     pub images: Option<Vec<String>>,
 }
 
-/// Sampling parameters for Ollama `/api/chat`, following Google's recommended
-/// configuration for Gemma4 models.
+/// Sampling parameters for Ollama `/api/chat`.
+/// All fields are optional — omitted fields fall back to Ollama's built-in defaults.
 #[derive(Serialize)]
 struct OllamaOptions {
-    temperature: f64,
-    top_p: f64,
-    top_k: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_ctx: Option<u64>,
+}
+
+/// Bundled parameters for `stream_ollama_chat`, used by the search pipeline.
+#[derive(Clone)]
+pub struct OllamaChatParams {
+    pub endpoint: String,
+    pub model: String,
+    pub messages: Vec<ChatMessage>,
+    pub think: bool,
+    pub keep_alive: Option<String>,
+    pub num_ctx: Option<u64>,
 }
 
 /// Request payload for Ollama `/api/chat` endpoint.
@@ -109,7 +125,19 @@ struct OllamaChatRequest {
     messages: Vec<ChatMessage>,
     stream: bool,
     think: bool,
+    #[serde(skip_serializing_if = "OllamaOptions::is_default")]
     options: OllamaOptions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keep_alive: Option<String>,
+}
+
+impl OllamaOptions {
+    fn is_default(&self) -> bool {
+        self.temperature.is_none()
+            && self.top_p.is_none()
+            && self.top_k.is_none()
+            && self.num_ctx.is_none()
+    }
 }
 
 /// Nested message object in Ollama `/api/chat` response chunks.
@@ -158,6 +186,16 @@ impl GenerationState {
     /// Clears the stored token without cancelling it (used on natural completion).
     fn clear(&self) {
         *self.token.lock().unwrap() = None;
+    }
+
+    /// Alias for `set` — stores a new cancellation token (used by search pipeline).
+    pub fn set_token(&self, token: CancellationToken) {
+        self.set(token);
+    }
+
+    /// Alias for `clear` — clears the token on natural completion (used by search pipeline).
+    pub fn clear_token(&self) {
+        self.clear();
     }
 }
 
@@ -240,9 +278,10 @@ pub fn get_model_config(model_config: tauri::State<'_, ModelConfig>) -> serde_js
 }
 
 /// Changes the active model at runtime.
+/// Legacy — replaced by models::set_active_model. Kept as a plain function
+/// (not a Tauri command) for internal use until full migration.
 #[cfg_attr(coverage_nightly, coverage(off))]
-#[cfg_attr(not(coverage), tauri::command)]
-pub fn set_active_model(model_config: tauri::State<'_, ModelConfig>, model: String) -> Result<(), String> {
+pub fn set_active_model_legacy(model_config: tauri::State<'_, ModelConfig>, model: String) -> Result<(), String> {
     if !model_config.all.contains(&model) {
         return Err(format!("Model '{}' is not in the supported list", model));
     }
@@ -323,16 +362,45 @@ pub async fn stream_ollama_chat(
     cancel_token: CancellationToken,
     on_chunk: impl Fn(StreamChunk),
 ) -> String {
+    stream_ollama_chat_inner(
+        endpoint,
+        model,
+        messages,
+        think,
+        None,
+        None,
+        client,
+        cancel_token,
+        on_chunk,
+    )
+    .await
+}
+
+/// Inner implementation accepting optional `keep_alive` and `num_ctx` for the
+/// search pipeline.
+pub async fn stream_ollama_chat_inner(
+    endpoint: &str,
+    model: &str,
+    messages: Vec<ChatMessage>,
+    think: bool,
+    keep_alive: Option<String>,
+    num_ctx: Option<u64>,
+    client: &reqwest::Client,
+    cancel_token: CancellationToken,
+    on_chunk: impl Fn(StreamChunk),
+) -> String {
     let request_payload = OllamaChatRequest {
         model: model.to_string(),
         messages,
         stream: true,
         think,
         options: OllamaOptions {
-            temperature: 1.0,
-            top_p: 0.95,
-            top_k: 64,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            num_ctx,
         },
+        keep_alive,
     };
 
     let mut accumulated = String::new();
@@ -435,7 +503,7 @@ pub async fn ask_ollama(
     generation: State<'_, GenerationState>,
     history: State<'_, ConversationHistory>,
     system_prompt: State<'_, SystemPrompt>,
-    model_config: State<'_, ModelConfig>,
+    active_model_state: State<'_, crate::models::ActiveModelState>,
     ollama_url: State<'_, OllamaUrl>,
 ) -> Result<(), String> {
     let url = ollama_url.0.lock().unwrap().clone();
@@ -484,7 +552,12 @@ pub async fn ask_ollama(
         (epoch, msgs)
     };
 
-    let active_model = model_config.active.lock().unwrap().clone();
+    let active_model = active_model_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .unwrap_or_else(|| "gemma3:4b".to_string());
     let accumulated = stream_ollama_chat(
         &endpoint,
         &active_model,
@@ -1222,13 +1295,16 @@ mod tests {
     // ── sampling options test ────────────────────────────────────────────────
 
     #[tokio::test]
-    async fn sends_sampling_options_in_request() {
+    async fn sends_request_without_hardcoded_sampling_options() {
+        // Sampling options are now optional and omitted by default, letting
+        // Ollama use its own built-in defaults.
         let mut server = mockito::Server::new_async().await;
         let mock = server
             .mock("POST", "/api/chat")
-            .match_body(mockito::Matcher::PartialJsonString(
-                r#"{"options":{"temperature":1.0,"top_p":0.95,"top_k":64}}"#.to_string(),
-            ))
+            .match_body(mockito::Matcher::PartialJson(serde_json::json!({
+                "model": "test-model",
+                "stream": true
+            })))
             .with_body(chat_line("", true))
             .create_async()
             .await;
@@ -1401,13 +1477,16 @@ mod tests {
             stream: true,
             think: false,
             options: OllamaOptions {
-                temperature: 1.0,
-                top_p: 0.95,
-                top_k: 64,
+                temperature: None,
+                top_p: None,
+                top_k: None,
+                num_ctx: None,
             },
+            keep_alive: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["think"], false);
+        assert!(json.get("options").is_none(), "default options should be omitted");
     }
 
     #[test]
@@ -1418,10 +1497,12 @@ mod tests {
             stream: true,
             think: true,
             options: OllamaOptions {
-                temperature: 1.0,
-                top_p: 0.95,
-                top_k: 64,
+                temperature: None,
+                top_p: None,
+                top_k: None,
+                num_ctx: None,
             },
+            keep_alive: None,
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["think"], true);

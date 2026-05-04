@@ -17,8 +17,14 @@ import type { Message } from './hooks/useOllama';
 import { useTts } from './hooks/useTts';
 import { useConversationHistory } from './hooks/useConversationHistory';
 import { useAgentMode } from './hooks/useAgentMode';
+import { useModelSelection } from './hooks/useModelSelection';
 import { AgentIndicator } from './components/AgentIndicator';
+import { TipBar } from './components/TipBar';
+import { useTips } from './hooks/useTips';
 import { MinibarView } from './components/MinibarView';
+import { ModelPicker } from './components/ModelPicker';
+import { CapabilityMismatchStrip } from './components/CapabilityMismatchStrip';
+import { getCapabilityConflicts, hasVisionConflict } from './config/capabilityConflicts';
 import { ConversationView } from './view/ConversationView';
 import { AskBarView, MAX_IMAGES } from './view/AskBarView';
 import { OnboardingView } from './view/onboarding/index';
@@ -160,7 +166,7 @@ function App() {
     [persistTurn],
   );
 
-  const { messages, ask, cancel, isGenerating, reset, loadMessages } =
+  const { messages, ask, askSearch, cancel, isGenerating, reset, loadMessages } =
     useOllama(handleTurnComplete);
 
   const {
@@ -206,6 +212,10 @@ function App() {
   /** Error message from a failed /screen capture. Shown inline above the ask
    *  bar so the user knows capture failed rather than seeing no response. */
   const [captureError, setCaptureError] = useState<string | null>(null);
+  /** Capability conflict messages when the active model doesn't support a
+   *  required capability (e.g., vision for /screen or image uploads, thinking
+   *  for /think). Shown via CapabilityMismatchStrip above the ask bar. */
+  const [capabilityConflicts, setCapabilityConflicts] = useState<string[]>([]);
   /**
    * Set to true when a /screen capture is dispatched, false when it resolves
    * or when the user cancels. Lets the async tail in handleScreenSubmit
@@ -234,12 +244,11 @@ function App() {
    */
   const [sessionId, setSessionId] = useState(0);
   const [selectedContext, setSelectedContext] = useState<string | null>(null);
-  const [modelConfig, setModelConfig] = useState<{
-    active: string;
-    all: string[];
-  } | null>(null);
+  const modelSelection = useModelSelection();
 
-  const agentMode = useAgentMode(modelConfig);
+  const agentMode = useAgentMode(modelSelection.active
+    ? { active: modelSelection.active }
+    : null);
 
   /**
    * True when the window is near the screen bottom and should grow upward.
@@ -253,6 +262,7 @@ function App() {
    * to chat-window mode are animated via Framer Motion `layout` prop.
    */
   const isChatMode = messages.length > 0 || isGenerating || isSubmitPending;
+  const { tip, tipKey, isVisible: tipVisible } = useTips(isChatMode);
   const previousIsChatModeRef = useRef(isChatMode);
 
   /**
@@ -584,12 +594,12 @@ function App() {
       if (isSaved) {
         await unsave();
       } else {
-        await save(messages, modelConfig?.active ?? DEFAULT_MODEL_FALLBACK);
+        await save(messages, modelSelection.active ?? DEFAULT_MODEL_FALLBACK);
       }
     } catch {
       // State stays unchanged on failure; feedback is implicit in the icon.
     }
-  }, [isSaved, unsave, save, messages, modelConfig]);
+  }, [isSaved, unsave, save, messages, modelSelection.active]);
 
   /**
    * Loads a conversation from history, replacing the current session.
@@ -624,7 +634,7 @@ function App() {
   const handleSaveAndLoad = useCallback(
     async (id: string) => {
       try {
-        await save(messages, modelConfig?.active ?? DEFAULT_MODEL_FALLBACK);
+        await save(messages, modelSelection.active ?? DEFAULT_MODEL_FALLBACK);
       } catch {
         // Save failed — abort to avoid leaving the current session unprotected.
         return;
@@ -638,7 +648,7 @@ function App() {
         setIsHistoryOpen(false);
       }
     },
-    [save, messages, loadConversation, loadMessages, modelConfig],
+    [save, messages, loadConversation, loadMessages, modelSelection.active],
   );
 
   /**
@@ -696,12 +706,12 @@ function App() {
   /** Saves the current conversation then starts a fresh one. */
   const handleSaveAndNew = useCallback(async () => {
     try {
-      await save(messages, modelConfig?.active ?? DEFAULT_MODEL_FALLBACK);
+      await save(messages, modelSelection.active ?? DEFAULT_MODEL_FALLBACK);
     } catch {
       return;
     }
     resetForNewConversation();
-  }, [save, messages, resetForNewConversation, modelConfig]);
+  }, [save, messages, resetForNewConversation, modelSelection.active]);
 
   /** Discards the current conversation and starts a fresh one. */
   const handleJustNew = useCallback(() => {
@@ -991,14 +1001,35 @@ function App() {
     )
       return;
 
-    // Clear any stale capture error from a previous attempt.
+    // Clear any stale capture error and capability conflicts from a previous attempt.
     setCaptureError(null);
+    setCapabilityConflicts([]);
 
     // Parse all valid commands from anywhere in the message.
     const trimmedQuery = query.trim();
     const { found, strippedMessage } = parseCommands(trimmedQuery);
     const hasScreen = found.has('/screen');
     const hasThink = found.has('/think');
+
+    // Check for capability conflicts before dispatching.
+    const conflicts: string[] = [];
+    for (const cmd of found) {
+      const cmdConflicts = getCapabilityConflicts(
+        modelSelection.active,
+        modelSelection.capabilities,
+        cmd,
+      );
+      conflicts.push(...cmdConflicts.map((c) => c.message));
+    }
+    if (hasVisionConflict(modelSelection.active, modelSelection.capabilities, attachedImages.length)) {
+      conflicts.push(
+        `${modelSelection.active} does not support image input. Attach images to a vision-capable model.`,
+      );
+    }
+    if (conflicts.length > 0) {
+      setCapabilityConflicts(conflicts);
+      return;
+    }
 
     // Check for utility commands with prompt templates.
     const utilityTrigger = Array.from(found).find((t) => {
@@ -1052,6 +1083,19 @@ function App() {
       setSelectedContext(null);
       setAttachedImages([]);
       void agentMode.start(task);
+      return;
+    }
+
+    if (found.has('/search')) {
+      const searchQuery = strippedMessage || selectedContext?.trim() || '';
+      if (!searchQuery) return;
+      setQuery('');
+      setSelectedContext(null);
+      for (const img of attachedImages) {
+        URL.revokeObjectURL(img.blobUrl);
+      }
+      setAttachedImages([]);
+      void askSearch(searchQuery, trimmedQuery, selectedContext?.trim() || undefined);
       return;
     }
 
@@ -1170,10 +1214,14 @@ function App() {
     isGenerating,
     executeSubmit,
     handleScreenSubmit,
+    askSearch,
     selectedContext,
     setSelectedContext,
     attachedImages,
     setCaptureError,
+    setCapabilityConflicts,
+    modelSelection.active,
+    modelSelection.capabilities,
   ]);
 
   // When a pending submit exists and all images finish processing, fire it.
@@ -1268,12 +1316,7 @@ function App() {
     cancel();
   }, [isSubmitPending, cancel, setSelectedContext]);
 
-  /** Fetches model configuration from the backend once at mount. */
-  useEffect(() => {
-    void invoke<{ active: string; all: string[] }>('get_model_config').then(
-      setModelConfig,
-    );
-  }, []);
+  /** Model configuration is now managed by useModelSelection hook. */
 
   /**
    * Synchronizes the React animation state with Tauri-driven overlay visibility
@@ -1533,6 +1576,17 @@ function App() {
                 }}
                 className={`morphing-container relative flex flex-col bg-surface-base max-h-[600px] overflow-hidden`}
               >
+                {/* Model Picker — shown in chat mode above the conversation */}
+                {isChatMode && (
+                  <ModelPicker
+                    active={modelSelection.active}
+                    all={modelSelection.all}
+                    ollamaReachable={modelSelection.ollamaReachable}
+                    capabilities={modelSelection.capabilities}
+                    onSelect={modelSelection.selectModel}
+                  />
+                )}
+
                 {/* Chat Messages Area — morphs in when in chat mode */}
                 <AnimatePresence>
                   {isChatMode ? (
@@ -1614,14 +1668,30 @@ function App() {
                   </div>
                 )}
 
+                {/* Capability mismatch warnings — shown when the active model
+                    doesn't support a required capability (vision/thinking). */}
+                <CapabilityMismatchStrip
+                  activeModel={modelSelection.active}
+                  capabilities={modelSelection.capabilities}
+                  conflicts={capabilityConflicts}
+                />
+
                 {/* Agent mode indicator — shown when agent is active */}
                 <AgentIndicator
                   isActive={agentMode.isActive}
                   status={agentMode.status}
                   lastAction={agentMode.lastAction}
                   reasoning={agentMode.reasoning}
+                  pendingConfirmation={agentMode.pendingConfirmation}
                   onStop={agentMode.stop}
+                  onConfirm={agentMode.confirmAction}
+                  onReject={agentMode.rejectAction}
                 />
+
+                {/* Tip Bar — shown in chat mode */}
+                {isChatMode && tipVisible && (
+                  <TipBar tip={tip} tipKey={tipKey} />
+                )}
 
                 {/* Input Bar — always pinned to the bottom */}
                 <AskBarView

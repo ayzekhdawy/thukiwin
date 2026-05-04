@@ -5,11 +5,14 @@ import { CopyButton } from './CopyButton';
 import { SpeakButton } from './SpeakButton';
 import { ImageThumbnails } from './ImageThumbnails';
 import { ThinkingBlock } from './ThinkingBlock';
+import { SandboxSetupCard } from './SandboxSetupCard';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { formatQuotedText } from '../utils/formatQuote';
 import { quote } from '../config';
 import { COMMANDS, SCREEN_CAPTURE_PLACEHOLDER } from '../config/commands';
 import type { OllamaErrorKind } from '../hooks/useOllama';
+import type { SearchResultPreview, SearchWarning } from '../types/search';
+import { SEARCH_WARNING_COPY, SEARCH_WARNING_SEVERITY } from '../config/searchWarnings';
 
 /**
  * Renders user message content with slash commands styled distinctly.
@@ -97,6 +100,12 @@ interface ChatBubbleProps {
   privacyAcknowledged?: boolean;
   /** Called when the user acknowledges the TTS privacy disclosure. */
   onAcknowledgePrivacy?: () => void;
+  /** Search result sources from /search pipeline. */
+  searchSources?: SearchResultPreview[];
+  /** Search warnings from /search pipeline. */
+  searchWarnings?: SearchWarning[];
+  /** Whether the search sandbox was unreachable. */
+  sandboxUnavailable?: boolean;
 }
 
 /**
@@ -146,6 +155,9 @@ export function ChatBubble({
   onStopSpeaking,
   privacyAcknowledged = false,
   onAcknowledgePrivacy,
+  searchSources,
+  searchWarnings,
+  sandboxUnavailable,
 }: ChatBubbleProps) {
   const isUser = role === 'user';
 
@@ -216,6 +228,27 @@ export function ChatBubble({
       ) : (
         /* AI plain text — full width, no bubble chrome */
         <div className="flex flex-col w-full">
+          {sandboxUnavailable && <SandboxSetupCard />}
+          {searchWarnings && searchWarnings.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {searchWarnings.map((w) => {
+                const severity = SEARCH_WARNING_SEVERITY[w];
+                const label = SEARCH_WARNING_COPY[w];
+                return (
+                  <span
+                    key={w}
+                    className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      severity === 'error'
+                        ? 'bg-red-900/30 text-red-400'
+                        : 'bg-amber-900/30 text-amber-400'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <div className="text-sm leading-relaxed select-text py-1">
             {thinkingContent && (
               <ThinkingBlock
@@ -229,6 +262,22 @@ export function ChatBubble({
               <MarkdownRenderer content={content} isStreaming={isStreaming} />
             )}
           </div>
+          {searchSources && searchSources.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {searchSources.map((s) => (
+                <a
+                  key={s.url}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-blue-400 hover:bg-white/10 truncate max-w-[200px]"
+                  title={s.url}
+                >
+                  {s.title}
+                </a>
+              ))}
+            </div>
+          )}
           {!errorKind && !isStreaming && (
             <div className="h-6 flex items-center">
               <CopyButton content={content} align="left" />

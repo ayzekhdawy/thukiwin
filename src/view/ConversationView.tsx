@@ -243,6 +243,9 @@ export function ConversationView({
               onStopSpeaking={onStopSpeaking}
               privacyAcknowledged={privacyAcknowledged}
               onAcknowledgePrivacy={onAcknowledgePrivacy}
+              searchSources={msg.searchSources}
+              searchWarnings={msg.searchWarnings}
+              sandboxUnavailable={msg.sandboxUnavailable}
             />
           );
         })}

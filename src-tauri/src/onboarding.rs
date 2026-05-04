@@ -50,11 +50,8 @@ pub fn set_stage(conn: &Connection, stage: &OnboardingStage) -> rusqlite::Result
 /// Returns which onboarding stage to show at startup, or `None` if onboarding
 /// is complete.
 ///
-/// Reads only the persisted stage: no permission API calls. Permission APIs
-/// (CGPreflightScreenCaptureAccess) can return stale results immediately after
-/// a process restart on macOS 15+. PermissionsStep owns live permission
-/// detection via its own polling checks. quit_and_relaunch writes "intro" to
-/// the DB before restarting so this path sees the correct stage on next launch.
+/// Reads only the persisted stage: no permission API calls. PermissionsStep
+/// owns live permission detection via its own polling checks.
 pub fn compute_startup_stage(conn: &Connection) -> rusqlite::Result<Option<OnboardingStage>> {
     match get_stage(conn)? {
         OnboardingStage::Complete => Ok(None),
@@ -157,8 +154,7 @@ mod tests {
     fn compute_startup_stage_trusts_intro_stage_even_if_permissions_check_fails() {
         let conn = open_in_memory().unwrap();
         // Startup trusts the persisted stage entirely. No permission API is
-        // called. CGPreflightScreenCaptureAccess can return false on macOS 15
-        // even after a successful grant+restart, so startup never gates on it.
+        // called at startup — the PermissionsStep component polls live.
         set_stage(&conn, &OnboardingStage::Intro).unwrap();
         let result = compute_startup_stage(&conn).unwrap();
         assert_eq!(result, Some(OnboardingStage::Intro));

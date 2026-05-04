@@ -2,11 +2,10 @@
 //!
 //! Queries the platform Accessibility API to detect any currently selected text
 //! and its screen bounds. Falls back gracefully when the focused app does not
-//! fully implement the AX protocol.
+//! fully implement the accessibility protocol.
 //!
 //! `ActivationContext` and `calculate_window_position` are cross-platform.
-//! The AX capture implementation is macOS-only; Windows uses its own
-//! context capture in `windows_activator`.
+//! Windows uses its own context capture in `windows_activator`.
 
 // ─── Cross-platform public types ─────────────────────────────────────────────
 
@@ -45,289 +44,16 @@ impl ActivationContext {
     }
 }
 
-// ─── macOS AX capture ────────────────────────────────────────────────────────
-
-#[cfg(target_os = "macos")]
-#[cfg_attr(coverage_nightly, coverage(off))]
-mod macos {
-    use std::ffi::c_void;
-
-    use core_foundation::base::{CFTypeRef, TCFType};
-    use core_foundation::string::{CFString, CFStringRef};
-    use core_graphics::geometry::{CGPoint, CGRect, CGSize};
-
-    use super::{ActivationContext, ScreenRect};
-
-    type AXUIElementRef = *const c_void;
-    type AXError = i32;
-    const K_AX_ERROR_SUCCESS: AXError = 0;
-    /// AXValueType constant for CGRect (kAXValueCGRectType = 3).
-    const K_AX_VALUE_TYPE_CG_RECT: u32 = 3;
-
-    // ApplicationServices is already linked by activator.rs.
-    extern "C" {
-        fn AXUIElementCreateSystemWide() -> AXUIElementRef;
-        fn AXUIElementCopyAttributeValue(
-            element: AXUIElementRef,
-            attribute: CFStringRef,
-            value: *mut CFTypeRef,
-        ) -> AXError;
-        fn AXUIElementCopyParameterizedAttributeValue(
-            element: AXUIElementRef,
-            attribute: CFStringRef,
-            parameter: CFTypeRef,
-            value: *mut CFTypeRef,
-        ) -> AXError;
-        fn AXValueGetValue(value: CFTypeRef, the_type: u32, out: *mut c_void) -> bool;
-        fn CFRelease(cf: CFTypeRef);
-        // CoreGraphics: mouse position and keyboard event simulation.
-        fn CGEventCreate(source: *const c_void) -> CFTypeRef;
-        fn CGEventGetLocation(event: CFTypeRef) -> CGPoint;
-        fn CGEventCreateKeyboardEvent(
-            source: *const c_void,
-            virtual_key: u16,
-            key_down: bool,
-        ) -> CFTypeRef;
-        fn CGEventSetFlags(event: CFTypeRef, flags: u64);
-        fn CGEventPost(tap_location: u32, event: CFTypeRef);
-    }
-
-    /// macOS virtual keycode for 'c'.
-    const KEY_C: u16 = 0x08;
-    /// CGEventTapLocation::kCGHIDEventTap
-    const K_CG_HID_EVENT_TAP: u32 = 0;
-    /// CGEventFlags::kCGEventFlagMaskCommand
-    const K_CG_EVENT_FLAG_MASK_COMMAND: u64 = 0x0010_0000;
-
-    /// Returns the current mouse cursor position in logical screen coordinates.
-    unsafe fn current_mouse_position() -> (f64, f64) {
-        let event = CGEventCreate(std::ptr::null());
-        if event.is_null() {
-            return (0.0, 0.0);
-        }
-        let pt = CGEventGetLocation(event);
-        CFRelease(event);
-        (pt.x, pt.y)
-    }
-
-    /// Posts a synthetic Cmd+C key-down / key-up pair to the focused application.
-    ///
-    /// # Safety
-    /// Caller must ensure Accessibility permission is granted before calling.
-    unsafe fn simulate_cmd_c() {
-        let down = CGEventCreateKeyboardEvent(std::ptr::null(), KEY_C, true);
-        if !down.is_null() {
-            CGEventSetFlags(down, K_CG_EVENT_FLAG_MASK_COMMAND);
-            CGEventPost(K_CG_HID_EVENT_TAP, down);
-            CFRelease(down);
-        }
-        let up = CGEventCreateKeyboardEvent(std::ptr::null(), KEY_C, false);
-        if !up.is_null() {
-            CGEventSetFlags(up, K_CG_EVENT_FLAG_MASK_COMMAND);
-            CGEventPost(K_CG_HID_EVENT_TAP, up);
-            CFRelease(up);
-        }
-    }
-
-    /// Reads the macOS general pasteboard as plain UTF-8.
-    fn clipboard_text() -> String {
-        std::process::Command::new("pbpaste")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .unwrap_or_default()
-    }
-
-    /// Replaces the macOS general pasteboard with the given string.
-    fn write_clipboard(text: &str) {
-        use std::io::Write as _;
-        if let Ok(mut child) = std::process::Command::new("pbcopy")
-            .stdin(std::process::Stdio::piped())
-            .spawn()
-        {
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(text.as_bytes());
-            }
-            let _ = child.wait();
-        }
-    }
-
-    /// Clipboard-based fallback for apps that don't expose selection via AX
-    /// (e.g. VS Code / Electron apps using Monaco editor).
-    ///
-    /// Saves the current clipboard, simulates Cmd+C to copy whatever is selected
-    /// in the focused application, reads the new clipboard, then restores the
-    /// original clipboard contents. Returns the newly copied text, or `None` if
-    /// the clipboard didn't change.
-    /// Concurrent calls are prevented by the caller-level
-    /// `OVERLAY_INTENDED_VISIBLE` atomic guard in `lib.rs`, which ensures only
-    /// one activation path is active at a time.
-    fn clipboard_fallback() -> Option<String> {
-        let before = clipboard_text();
-        // SAFETY: Accessibility permission is checked before the activator starts.
-        unsafe { simulate_cmd_c() };
-        // Poll the pasteboard with exponential backoff instead of a fixed sleep.
-        // Fast machines return in ~10ms; slower machines get up to ~150ms total.
-        let mut after = before.clone();
-        for delay_ms in [10, 20, 40, 80] {
-            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-            after = clipboard_text();
-            if after != before {
-                break;
-            }
-        }
-        // Always restore the original clipboard regardless of outcome.
-        if after != before {
-            write_clipboard(&before);
-        }
-        let trimmed = after.trim().to_string();
-        if after != before && !trimmed.is_empty() {
-            Some(trimmed)
-        } else {
-            None
-        }
-    }
-
-    unsafe fn focused_element() -> Option<AXUIElementRef> {
-        let system = AXUIElementCreateSystemWide();
-        if system.is_null() {
-            // system is null; CFRelease must not be called on a null pointer.
-            return None;
-        }
-        let key = CFString::new("AXFocusedUIElement");
-        let mut value: CFTypeRef = std::ptr::null();
-        let err = AXUIElementCopyAttributeValue(system, key.as_concrete_TypeRef(), &mut value);
-        CFRelease(system as CFTypeRef);
-        if err == K_AX_ERROR_SUCCESS && !value.is_null() {
-            Some(value as AXUIElementRef)
-        } else {
-            None
-        }
-    }
-
-    unsafe fn selected_text(element: AXUIElementRef) -> Option<String> {
-        let key = CFString::new("AXSelectedText");
-        let mut value: CFTypeRef = std::ptr::null();
-        let err = AXUIElementCopyAttributeValue(element, key.as_concrete_TypeRef(), &mut value);
-        if err != K_AX_ERROR_SUCCESS || value.is_null() {
-            return None;
-        }
-        let cf_str = CFString::wrap_under_create_rule(value as CFStringRef);
-        let text = cf_str.to_string();
-        if text.is_empty() {
-            None
-        } else {
-            Some(text)
-        }
-    }
-
-    unsafe fn selection_bounds(element: AXUIElementRef) -> Option<ScreenRect> {
-        let range_key = CFString::new("AXSelectedTextRange");
-        let mut range_value: CFTypeRef = std::ptr::null();
-        let err = AXUIElementCopyAttributeValue(
-            element,
-            range_key.as_concrete_TypeRef(),
-            &mut range_value,
-        );
-        if err != K_AX_ERROR_SUCCESS || range_value.is_null() {
-            return None;
-        }
-
-        let bounds_key = CFString::new("AXBoundsForRange");
-        let mut bounds_value: CFTypeRef = std::ptr::null();
-        let err = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            bounds_key.as_concrete_TypeRef(),
-            range_value,
-            &mut bounds_value,
-        );
-        CFRelease(range_value);
-
-        if err != K_AX_ERROR_SUCCESS || bounds_value.is_null() {
-            return None;
-        }
-
-        let mut rect = CGRect {
-            origin: CGPoint { x: 0.0, y: 0.0 },
-            size: CGSize {
-                width: 0.0,
-                height: 0.0,
-            },
-        };
-        let ok = AXValueGetValue(
-            bounds_value,
-            K_AX_VALUE_TYPE_CG_RECT,
-            &mut rect as *mut CGRect as *mut c_void,
-        );
-        CFRelease(bounds_value);
-
-        if ok && rect.size.width > 0.0 {
-            Some(ScreenRect {
-                x: rect.origin.x,
-                y: rect.origin.y,
-                width: rect.size.width,
-                height: rect.size.height,
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn capture() -> ActivationContext {
-        // SAFETY: All AX API calls are wrapped in this function. `element` is released
-        // at the end of this function and is not retained by `selected_text` or
-        // `selection_bounds` — both helpers use the pointer only within their call duration.
-        unsafe {
-            let mouse = current_mouse_position();
-
-            let Some(element) = focused_element() else {
-                // No focused element — try clipboard fallback before giving up.
-                let text = clipboard_fallback();
-                return ActivationContext {
-                    selected_text: text,
-                    bounds: None,
-                    mouse_position: Some(mouse),
-                };
-            };
-
-            let ax_text = selected_text(element);
-            let bounds = if ax_text.is_some() {
-                selection_bounds(element)
-            } else {
-                None
-            };
-            CFRelease(element as CFTypeRef);
-
-            // If AX returned no text (VS Code / Electron apps with Monaco), fall back
-            // to clipboard simulation so the user still gets context.
-            let text = if ax_text.is_some() {
-                ax_text
-            } else {
-                clipboard_fallback()
-            };
-
-            ActivationContext {
-                selected_text: text,
-                bounds,
-                mouse_position: Some(mouse),
-            }
-        }
-    }
-}
+// ─── Activation context capture ──────────────────────────────────────────────
 
 /// Captures the current activation context at the moment of the hotkey press.
 ///
 /// When `overlay_is_visible` is `true` the hotkey will hide the overlay, so
-/// no context is needed — skip AX queries and clipboard simulation entirely.
+/// no context is needed — skip queries entirely.
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub fn capture_activation_context(overlay_is_visible: bool) -> ActivationContext {
     if overlay_is_visible {
         return ActivationContext::empty();
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        macos::capture()
     }
 
     #[cfg(target_os = "windows")]
@@ -335,7 +61,7 @@ pub fn capture_activation_context(overlay_is_visible: bool) -> ActivationContext
         crate::windows_activator::capture()
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(target_os = "windows"))]
     {
         ActivationContext::empty()
     }
@@ -354,13 +80,10 @@ const ANCHOR_OFFSET_Y: f64 = 2.0;
 const WINDOW_BOTTOM_PADDING: f64 = 32.0;
 /// Minimum distance from any screen edge (logical pts).
 pub(crate) const SCREEN_MARGIN: f64 = 16.0;
-/// Menu bar height offset (logical pts). On macOS this accounts for the system
-/// menu bar at the top of the screen; on Windows there is no such offset.
-#[cfg(target_os = "macos")]
-pub(crate) const MENU_BAR_HEIGHT: f64 = 24.0;
+/// Menu bar height offset (logical pts). Always 0 on Windows (no system menu bar).
 #[cfg(target_os = "windows")]
 pub(crate) const MENU_BAR_HEIGHT: f64 = 0.0;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(target_os = "windows"))]
 pub(crate) const MENU_BAR_HEIGHT: f64 = 0.0;
 /// Result of the window placement calculation.
 #[derive(Debug, Clone, PartialEq)]

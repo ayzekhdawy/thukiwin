@@ -1,6 +1,14 @@
 import { useState, useCallback } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { notifyIfUnfocused } from '../utils/notification';
+import type {
+  SearchEvent,
+  SearchResultPreview,
+  SearchMetadata,
+  SearchStage,
+  SearchTraceStep,
+  SearchWarning,
+} from '../types/search';
 
 /** Mirrors the Rust OllamaErrorKind enum sent over IPC. */
 export type OllamaErrorKind = 'NotRunning' | 'ModelNotFound' | 'Other';
@@ -21,6 +29,16 @@ export interface Message {
   errorKind?: OllamaErrorKind;
   /** Accumulated thinking/reasoning content from the model, if thinking mode was used. */
   thinkingContent?: string;
+  /** Search result sources from /search pipeline. */
+  searchSources?: SearchResultPreview[];
+  /** Search warnings from /search pipeline. */
+  searchWarnings?: SearchWarning[];
+  /** Trace steps from /search pipeline. */
+  searchTraces?: SearchTraceStep[];
+  /** Metadata from /search pipeline. */
+  searchMetadata?: SearchMetadata;
+  /** True when the search sandbox was unreachable. */
+  sandboxUnavailable?: boolean;
 }
 
 /**
@@ -32,6 +50,11 @@ export type StreamChunk =
   | { type: 'Done' }
   | { type: 'Cancelled' }
   | { type: 'Error'; data: { kind: OllamaErrorKind; message: string } };
+
+/** Result payload delivered to callers when a `/search` pipeline turn finishes. */
+export interface SearchOutcome {
+  final: boolean;
+}
 
 /**
  * A custom hook that simplifies interactions with the local Ollama LLM.
@@ -48,6 +71,7 @@ export function useOllama(
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [searchStage, setSearchStage] = useState<SearchStage>(null);
 
   /**
    * Submits a message to the Ollama backend and initiates the streaming response.
@@ -177,6 +201,205 @@ export function useOllama(
     [isGenerating, onTurnComplete],
   );
 
+  /** Runs the agentic search pipeline for the `/search` command. */
+  const askSearch = useCallback(
+    async (
+      query: string,
+      displayContent?: string,
+      quotedText?: string,
+    ): Promise<SearchOutcome> => {
+      const trimmed = query.trim();
+      if (!trimmed) return { final: true };
+      if (isGenerating) return { final: true };
+
+      const userMsg: Message = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: displayContent ?? trimmed,
+        quotedText,
+      };
+      const assistantId = crypto.randomUUID();
+      const assistantMsg: Message = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+      };
+
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setIsGenerating(true);
+      setSearchStage(null);
+
+      const channel = new Channel<SearchEvent>();
+      let currentContent = '';
+      let pendingSources: SearchResultPreview[] | undefined;
+      let warnings: SearchWarning[] = [];
+      let pendingTraces: SearchTraceStep[] = [];
+      let pendingMetadata: SearchMetadata | undefined;
+      let awaitingClarification = false;
+      let errored = false;
+      let cancelled = false;
+
+      const updateAssistant = (patch: Partial<Message>) => {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId ? { ...message, ...patch } : message,
+          ),
+        );
+      };
+
+      return new Promise<SearchOutcome>((resolve) => {
+        let inGapRound = false;
+
+        const finish = (final: boolean) => {
+          setIsGenerating(false);
+          setSearchStage(null);
+
+          if (!errored && !cancelled && currentContent) {
+            updateAssistant({
+              searchSources: pendingSources,
+              searchWarnings: warnings.length > 0 ? warnings : undefined,
+              searchTraces: pendingTraces,
+              searchMetadata: pendingMetadata,
+            });
+            onTurnComplete?.(userMsg, {
+              ...assistantMsg,
+              content: currentContent,
+              searchSources: pendingSources,
+              searchWarnings: warnings.length > 0 ? warnings : undefined,
+              searchTraces: pendingTraces,
+              searchMetadata: pendingMetadata,
+            });
+          }
+
+          resolve({ final });
+        };
+
+        channel.onmessage = (event: SearchEvent) => {
+          switch (event.type) {
+            case 'Trace': {
+              const existingIdx = pendingTraces.findIndex(
+                (s) => s.id === event.step.id,
+              );
+              if (existingIdx === -1) {
+                pendingTraces = [...pendingTraces, event.step];
+              } else {
+                pendingTraces = pendingTraces.map((s) =>
+                  s.id === event.step.id ? event.step : s,
+                );
+              }
+              awaitingClarification ||= event.step.kind === 'clarify';
+              updateAssistant({ searchTraces: pendingTraces });
+              break;
+            }
+            case 'AnalyzingQuery': {
+              setSearchStage({ kind: 'analyzing_query' });
+              break;
+            }
+            case 'Searching': {
+              setSearchStage(
+                inGapRound ? { kind: 'searching', gap: true } : { kind: 'searching' },
+              );
+              break;
+            }
+            case 'FetchingUrl':
+            case 'ReadingSources': {
+              setSearchStage(
+                inGapRound
+                  ? { kind: 'reading_sources', gap: true }
+                  : { kind: 'reading_sources' },
+              );
+              break;
+            }
+            case 'RefiningSearch': {
+              inGapRound = true;
+              setSearchStage({
+                kind: 'refining_search',
+                attempt: event.attempt,
+                total: event.total,
+              });
+              break;
+            }
+            case 'Composing': {
+              setSearchStage(
+                inGapRound ? { kind: 'composing', gap: true } : { kind: 'composing' },
+              );
+              break;
+            }
+            case 'Sources': {
+              pendingSources = event.results;
+              break;
+            }
+            case 'Token': {
+              currentContent += event.content;
+              setSearchStage(null);
+              updateAssistant({ content: currentContent });
+              break;
+            }
+            case 'Warning': {
+              warnings = [...warnings, event.warning];
+              break;
+            }
+            case 'Done': {
+              pendingMetadata = event.metadata ?? pendingMetadata;
+              finish(!awaitingClarification && !!currentContent);
+              break;
+            }
+            case 'Cancelled': {
+              cancelled = true;
+              if (!currentContent) {
+                setMessages((prev) =>
+                  prev.filter((message) => message.id !== assistantId),
+                );
+              }
+              setIsGenerating(false);
+              setSearchStage(null);
+              resolve({ final: true });
+              break;
+            }
+            case 'Error': {
+              errored = true;
+              updateAssistant({
+                content: event.message,
+                errorKind: 'Other',
+              });
+              finish(true);
+              break;
+            }
+            case 'SandboxUnavailable': {
+              errored = true;
+              updateAssistant({ sandboxUnavailable: true });
+              finish(true);
+              break;
+            }
+            case 'IterationComplete': {
+              // Finalize running trace steps for this iteration.
+              const finalized = pendingTraces.map((s) =>
+                s.status === 'running' ? { ...s, status: 'completed' as const } : s,
+              );
+              pendingTraces = finalized;
+              updateAssistant({ searchTraces: finalized });
+              break;
+            }
+          }
+        };
+
+        invoke('search_pipeline', {
+          message: trimmed,
+          onEvent: channel,
+        }).catch(() => {
+          if (errored || cancelled) return;
+          errored = true;
+          updateAssistant({
+            content: 'Something went wrong\nCould not start search.',
+            errorKind: 'Other' as const,
+          });
+          finish(true);
+        });
+      });
+    },
+    [isGenerating, onTurnComplete],
+  );
+
   /** Cancels the currently active generation by signalling the Rust backend. */
   const cancel = useCallback(async () => {
     if (!isGenerating) return;
@@ -207,8 +430,10 @@ export function useOllama(
   return {
     messages,
     ask,
+    askSearch,
     cancel,
     isGenerating,
+    searchStage,
     reset,
     loadMessages,
   };

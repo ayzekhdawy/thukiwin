@@ -14,11 +14,13 @@ import { createPortal } from 'react-dom';
 interface TooltipProps {
   /** Short label to display inside the tooltip. */
   label: string;
+  /** Allow the tooltip text to wrap across multiple lines. */
+  multiline?: boolean;
   /** The trigger element — usually an icon button. */
   children: React.ReactNode;
 }
 
-export function Tooltip({ label, children }: TooltipProps) {
+export function Tooltip({ label, multiline, children }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   /** Defer portal mount until after first hover (lazy load). */
   const [hasActivated, setHasActivated] = useState(false);
@@ -112,7 +114,7 @@ export function Tooltip({ label, children }: TooltipProps) {
                     }}
                     className="absolute -top-1.5 h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-surface-border bg-surface-base"
                   />
-                  <div className="relative rounded-lg border border-surface-border bg-surface-base px-2.5 py-1.5 text-[11px] text-text-primary whitespace-nowrap">
+                  <div className={`relative rounded-lg border border-surface-border bg-surface-base px-2.5 py-1.5 text-[11px] text-text-primary ${multiline ? 'whitespace-normal max-w-[240px]' : 'whitespace-nowrap'}`}>
                     {label}
                   </div>
                 </motion.div>
